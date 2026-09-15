@@ -21,11 +21,12 @@ class GateCalculator {
     if (!el) {
       el = document.createElement('div');
       el.id = this.containerId;
-      el.className = 'gate-calc-window';
-      el.style.display = 'none';
       document.body.appendChild(el);
     }
+    el.classList.add('gate-calc-window');
+    el.style.display = 'none';
     this.el = el;
+    this.isMinimized = false;
     this.render();
     this.attachEvents();
   }
@@ -38,6 +39,12 @@ class GateCalculator {
     }
   }
 
+  open() {
+    this.isOpen = true;
+    this.el.style.display = 'flex';
+    this.ensureInViewport();
+  }
+
   close() {
     this.isOpen = false;
     this.el.style.display = 'none';
@@ -48,7 +55,7 @@ class GateCalculator {
     const winWidth = window.innerWidth;
     const winHeight = window.innerHeight;
 
-    if (rect.left < 10 || rect.right > winWidth - 10 || rect.top < 50 || rect.bottom > winHeight - 10) {
+    if (!rect.width || !rect.height || rect.left < 5 || rect.right > winWidth - 5 || rect.top < 40 || rect.bottom > winHeight - 5) {
       this.el.style.top = '70px';
       this.el.style.right = '24px';
       this.el.style.left = 'auto';
@@ -60,24 +67,25 @@ class GateCalculator {
       <div class="calc-header" id="gate-calc-drag-handle">
         <div class="calc-header-title">
           <span class="calc-header-icon">&#129534;</span>
-          <span>GATE Virtual Calculator</span>
+          <span class="calc-title-text">GATE Virtual Scientific Calculator</span>
         </div>
-        <button id="calc-close-btn" class="calc-close-button" title="Close Calculator">&times;</button>
+        <div class="calc-header-controls">
+          <button type="button" id="calc-min-btn" class="calc-ctrl-btn" title="Minimize / Restore">&#8211;</button>
+          <button type="button" id="calc-close-btn" class="calc-ctrl-btn calc-close-btn" title="Close Calculator">&times;</button>
+        </div>
       </div>
 
-      <div class="calc-screen-box">
-        <div class="calc-display-status">
-          <span id="calc-mem-indicator" class="calc-status-indicator mem-hidden">M</span>
-          <span id="calc-mode-indicator" class="calc-status-indicator">Deg</span>
+      <div class="calc-main-body">
+        <div class="calc-screen-box">
+          <div class="calc-display-status">
+            <span id="calc-mem-indicator" class="calc-status-indicator mem-hidden">M</span>
+            <span id="calc-mode-indicator" class="calc-status-indicator">Deg</span>
+          </div>
+          <div id="calc-equation" class="calc-equation-line">&nbsp;</div>
+          <div id="calc-result" class="calc-result-line">0</div>
         </div>
-        <div id="calc-equation" class="calc-equation-line">&nbsp;</div>
-        <div id="calc-result" class="calc-result-line">0</div>
-      </div>
 
-      <div class="calc-keys-container">
-        <!-- Row 1: mod + Deg/Rad radio + MC MR MS M+ M- -->
-        <div class="calc-btn-row">
-          <button type="button" class="calc-btn calc-btn-op" data-action="mod" title="Modulo">mod</button>
+        <div class="calc-toolbar-row">
           <div class="calc-angle-selector">
             <label class="calc-radio-label">
               <input type="radio" name="calc-angle" value="deg" checked id="calc-radio-deg">
@@ -88,100 +96,134 @@ class GateCalculator {
               <span>Rad</span>
             </label>
           </div>
-          <button type="button" class="calc-btn calc-btn-mem" data-action="mc" title="Memory Clear">MC</button>
-          <button type="button" class="calc-btn calc-btn-mem" data-action="mr" title="Memory Recall">MR</button>
-          <button type="button" class="calc-btn calc-btn-mem" data-action="ms" title="Memory Store">MS</button>
-          <button type="button" class="calc-btn calc-btn-mem" data-action="m+" title="Memory Add">M+</button>
-          <button type="button" class="calc-btn calc-btn-mem" data-action="m-" title="Memory Subtract">M-</button>
+          <div class="calc-memory-group">
+            <button type="button" class="calc-btn calc-btn-mem" data-action="mc" title="Memory Clear">MC</button>
+            <button type="button" class="calc-btn calc-btn-mem" data-action="mr" title="Memory Recall">MR</button>
+            <button type="button" class="calc-btn calc-btn-mem" data-action="ms" title="Memory Store">MS</button>
+            <button type="button" class="calc-btn calc-btn-mem" data-action="m+" title="Memory Add">M+</button>
+            <button type="button" class="calc-btn calc-btn-mem" data-action="m-" title="Memory Subtract">M-</button>
+          </div>
         </div>
 
-        <!-- Row 2: sinh cosh tanh Exp ( ) ← C +/- √ -->
-        <div class="calc-btn-row">
-          <button type="button" class="calc-btn calc-btn-fn" data-action="sinh">sinh</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="cosh">cosh</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="tanh">tanh</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="exp-notation" title="Scientific Notation">Exp</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="(">(</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action=")">)</button>
-          <button type="button" class="calc-btn calc-btn-mem" data-action="backspace" title="Backspace">&larr;</button>
-          <button type="button" class="calc-btn calc-btn-mem" data-action="clear" title="Clear">C</button>
-          <button type="button" class="calc-btn calc-btn-mem" data-action="negate">+/-</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="sqrt">&radic;</button>
-        </div>
+        <div class="calc-panels-container">
+          <!-- Left Panel: Scientific Functions (5 columns x 6 rows) -->
+          <div class="calc-scientific-panel">
+            <!-- Row 1 -->
+            <button type="button" class="calc-btn calc-btn-op" data-action="mod" title="Modulo">mod</button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="sinh">sinh</button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="cosh">cosh</button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="tanh">tanh</button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="exp-notation" title="Scientific Notation">Exp</button>
+            <!-- Row 2 -->
+            <button type="button" class="calc-btn calc-btn-fn" data-action="abs" title="Absolute Value">|x|</button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="asinh">sinh<sup>-1</sup></button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="acosh">cosh<sup>-1</sup></button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="atanh">tanh<sup>-1</sup></button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="log2">log<sub>2</sub>x</button>
+            <!-- Row 3 -->
+            <button type="button" class="calc-btn calc-btn-fn" data-action="pi">&pi;</button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="sin">sin</button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="cos">cos</button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="tan">tan</button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="ln">ln</button>
+            <!-- Row 4 -->
+            <button type="button" class="calc-btn calc-btn-fn" data-action="euler">e</button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="asin">sin<sup>-1</sup></button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="acos">cos<sup>-1</sup></button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="atan">tan<sup>-1</sup></button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="log">log</button>
+            <!-- Row 5 -->
+            <button type="button" class="calc-btn calc-btn-fn" data-action="factorial">n!</button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="pow-xy">x<sup>y</sup></button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="cube">x<sup>3</sup></button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="square">x<sup>2</sup></button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="pow10">10<sup>x</sup></button>
+            <!-- Row 6 -->
+            <button type="button" class="calc-btn calc-btn-fn" data-action="reciprocal">1/x</button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="yroot"><sup>y</sup>&radic;x</button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="cbrt"><sup>3</sup>&radic;x</button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="sqrt">&radic;</button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action="exp-e">e<sup>x</sup></button>
+          </div>
 
-        <!-- Row 3: sinh⁻¹ cosh⁻¹ tanh⁻¹ log₂x ln log 7 8 9 ÷ % -->
-        <div class="calc-btn-row">
-          <button type="button" class="calc-btn calc-btn-fn" data-action="asinh">sinh<sup>-1</sup></button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="acosh">cosh<sup>-1</sup></button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="atanh">tanh<sup>-1</sup></button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="log2">log<sub>2</sub>x</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="ln">ln</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="log">log</button>
-          <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="7">7</button>
-          <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="8">8</button>
-          <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="9">9</button>
-          <button type="button" class="calc-btn calc-btn-op" data-action="op" data-val="/">&divide;</button>
-          <button type="button" class="calc-btn calc-btn-op" data-action="percent">%</button>
-        </div>
+          <!-- Vertical separator line -->
+          <div class="calc-panel-separator"></div>
 
-        <!-- Row 4: π e n! logᵧx eˣ 10ˣ 4 5 6 × 1/x -->
-        <div class="calc-btn-row">
-          <button type="button" class="calc-btn calc-btn-fn" data-action="pi">&pi;</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="euler">e</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="factorial">n!</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="logyx">log<sub>y</sub>x</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="exp-e">e<sup>x</sup></button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="pow10">10<sup>x</sup></button>
-          <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="4">4</button>
-          <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="5">5</button>
-          <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="6">6</button>
-          <button type="button" class="calc-btn calc-btn-op" data-action="op" data-val="*">&times;</button>
-          <button type="button" class="calc-btn calc-btn-op" data-action="reciprocal">1/x</button>
-        </div>
-
-        <!-- Row 5: sin cos tan xʸ x³ x² 1 2 3 − -->
-        <div class="calc-btn-row">
-          <button type="button" class="calc-btn calc-btn-fn" data-action="sin">sin</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="cos">cos</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="tan">tan</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="pow-xy">x<sup>y</sup></button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="cube">x<sup>3</sup></button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="square">x<sup>2</sup></button>
-          <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="1">1</button>
-          <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="2">2</button>
-          <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="3">3</button>
-          <button type="button" class="calc-btn calc-btn-op" data-action="op" data-val="-">&minus;</button>
-        </div>
-
-        <!-- Row 6: sin⁻¹ cos⁻¹ tan⁻¹ ʸ√x ³√x |x| 0 . + = -->
-        <div class="calc-btn-row">
-          <button type="button" class="calc-btn calc-btn-fn" data-action="asin">sin<sup>-1</sup></button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="acos">cos<sup>-1</sup></button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="atan">tan<sup>-1</sup></button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="yroot"><sup>y</sup>&radic;x</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="cbrt"><sup>3</sup>&radic;x</button>
-          <button type="button" class="calc-btn calc-btn-fn" data-action="abs">|x|</button>
-          <button type="button" class="calc-btn calc-btn-num calc-btn-wide" data-action="digit" data-val="0">0</button>
-          <button type="button" class="calc-btn calc-btn-num" data-action="decimal">.</button>
-          <button type="button" class="calc-btn calc-btn-op" data-action="op" data-val="+">+</button>
-          <button type="button" class="calc-btn calc-btn-eq" data-action="equals">=</button>
+          <!-- Right Panel: Numeric Keypad (4 columns x 6 rows) -->
+          <div class="calc-numeric-panel">
+            <!-- Row 1: ( ) Backspace Clear -->
+            <button type="button" class="calc-btn calc-btn-fn" data-action="(">(</button>
+            <button type="button" class="calc-btn calc-btn-fn" data-action=")">)</button>
+            <button type="button" class="calc-btn calc-btn-mem" data-action="backspace" title="Backspace">&larr;</button>
+            <button type="button" class="calc-btn calc-btn-mem" data-action="clear" title="Clear">C</button>
+            <!-- Row 2: 7 8 9 ÷ -->
+            <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="7">7</button>
+            <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="8">8</button>
+            <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="9">9</button>
+            <button type="button" class="calc-btn calc-btn-op" data-action="op" data-val="/">&divide;</button>
+            <!-- Row 3: 4 5 6 × -->
+            <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="4">4</button>
+            <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="5">5</button>
+            <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="6">6</button>
+            <button type="button" class="calc-btn calc-btn-op" data-action="op" data-val="*">&times;</button>
+            <!-- Row 4: 1 2 3 − -->
+            <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="1">1</button>
+            <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="2">2</button>
+            <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="3">3</button>
+            <button type="button" class="calc-btn calc-btn-op" data-action="op" data-val="-">&minus;</button>
+            <!-- Row 5: 0 . +/- + -->
+            <button type="button" class="calc-btn calc-btn-num" data-action="digit" data-val="0">0</button>
+            <button type="button" class="calc-btn calc-btn-num" data-action="decimal">.</button>
+            <button type="button" class="calc-btn calc-btn-num" data-action="negate">+/-</button>
+            <button type="button" class="calc-btn calc-btn-op" data-action="op" data-val="+">+</button>
+            <!-- Row 6: = (spanning 4 columns) -->
+            <button type="button" class="calc-btn calc-btn-eq calc-btn-eq-full" data-action="equals">=</button>
+          </div>
         </div>
       </div>
     `;
   }
 
   attachEvents() {
-    this.el.querySelector('#calc-close-btn').addEventListener('click', () => this.close());
+    const closeBtn = this.el.querySelector('#calc-close-btn');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.close();
+      });
+    }
+
+    const minBtn = this.el.querySelector('#calc-min-btn');
+    if (minBtn) {
+      minBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleMinimize();
+      });
+    }
+
+    const dragHandle = this.el.querySelector('#gate-calc-drag-handle');
+    if (dragHandle) {
+      dragHandle.addEventListener('dblclick', (e) => {
+        if (e.target && e.target.closest('.calc-ctrl-btn')) return;
+        this.toggleMinimize();
+      });
+    }
 
     // Angle mode radio listener
-    this.el.querySelector('#calc-radio-deg').addEventListener('change', () => {
-      this.isDegree = true;
-      this.updateIndicators();
-    });
-    this.el.querySelector('#calc-radio-rad').addEventListener('change', () => {
-      this.isDegree = false;
-      this.updateIndicators();
-    });
+    const radDeg = this.el.querySelector('#calc-radio-deg');
+    const radRad = this.el.querySelector('#calc-radio-rad');
+    if (radDeg) {
+      radDeg.addEventListener('change', () => {
+        this.isDegree = true;
+        this.updateIndicators();
+      });
+    }
+    if (radRad) {
+      radRad.addEventListener('change', () => {
+        this.isDegree = false;
+        this.updateIndicators();
+      });
+    }
 
     // Button click delegation
     this.el.querySelectorAll('.calc-btn').forEach(btn => {
@@ -195,52 +237,110 @@ class GateCalculator {
 
     // Make window smoothly draggable
     this.setupDraggable();
+
+    // Escape key listener to close
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.isOpen) {
+        this.close();
+      }
+    });
+  }
+
+  toggleMinimize() {
+    this.isMinimized = !this.isMinimized;
+    const minBtn = this.el.querySelector('#calc-min-btn');
+    if (this.isMinimized) {
+      this.el.classList.add('calc-minimized');
+      if (minBtn) {
+        minBtn.innerHTML = '&#9633;';
+        minBtn.title = 'Restore Calculator';
+      }
+    } else {
+      this.el.classList.remove('calc-minimized');
+      if (minBtn) {
+        minBtn.innerHTML = '&#8211;';
+        minBtn.title = 'Minimize Calculator';
+      }
+    }
   }
 
   setupDraggable() {
     const handle = this.el.querySelector('#gate-calc-drag-handle');
+    if (!handle) return;
     let isDragging = false;
     let startX, startY, origLeft, origTop;
 
-    const onMouseDown = (e) => {
-      if (e.target.id === 'calc-close-btn') return;
+    const startDrag = (clientX, clientY, target) => {
+      if (target && target.closest('.calc-ctrl-btn')) return false;
       isDragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
+      startX = clientX;
+      startY = clientY;
       const rect = this.el.getBoundingClientRect();
       origLeft = rect.left;
       origTop = rect.top;
       this.el.classList.add('calc-dragging');
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
-      e.preventDefault();
+      return true;
     };
 
-    const onMouseMove = (e) => {
+    const moveDrag = (clientX, clientY) => {
       if (!isDragging) return;
-      let newLeft = origLeft + (e.clientX - startX);
-      let newTop = origTop + (e.clientY - startY);
+      let newLeft = origLeft + (clientX - startX);
+      let newTop = origTop + (clientY - startY);
 
-      // Clamping to keep calculator visible
-      const maxLeft = window.innerWidth - this.el.offsetWidth - 10;
-      const maxTop = window.innerHeight - this.el.offsetHeight - 10;
+      // Clamping to keep calculator visible within viewport
+      const maxLeft = Math.max(0, window.innerWidth - this.el.offsetWidth - 5);
+      const maxTop = Math.max(0, window.innerHeight - this.el.offsetHeight - 5);
 
-      newLeft = Math.max(10, Math.min(newLeft, maxLeft));
-      newTop = Math.max(40, Math.min(newTop, maxTop));
+      newLeft = Math.max(5, Math.min(newLeft, maxLeft));
+      newTop = Math.max(5, Math.min(newTop, maxTop));
 
       this.el.style.left = `${newLeft}px`;
       this.el.style.top = `${newTop}px`;
       this.el.style.right = 'auto';
     };
 
-    const onMouseUp = () => {
+    const stopDrag = () => {
+      if (!isDragging) return;
       isDragging = false;
       this.el.classList.remove('calc-dragging');
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
     };
 
-    handle.addEventListener('mousedown', onMouseDown);
+    // Mouse events
+    handle.addEventListener('mousedown', (e) => {
+      if (startDrag(e.clientX, e.clientY, e.target)) {
+        const onMouseMove = (ev) => moveDrag(ev.clientX, ev.clientY);
+        const onMouseUp = () => {
+          stopDrag();
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        };
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        e.preventDefault();
+      }
+    });
+
+    // Touch events
+    handle.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        if (startDrag(touch.clientX, touch.clientY, e.target)) {
+          const onTouchMove = (ev) => {
+            if (ev.touches.length === 1) {
+              moveDrag(ev.touches[0].clientX, ev.touches[0].clientY);
+              ev.preventDefault();
+            }
+          };
+          const onTouchEnd = () => {
+            stopDrag();
+            document.removeEventListener('touchmove', onTouchMove);
+            document.removeEventListener('touchend', onTouchEnd);
+          };
+          document.addEventListener('touchmove', onTouchMove, { passive: false });
+          document.addEventListener('touchend', onTouchEnd);
+        }
+      }
+    }, { passive: true });
   }
 
   updateDisplay() {
