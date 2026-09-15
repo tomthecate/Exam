@@ -1,0 +1,117 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GateMockExamPaper",
+  "type": "object",
+  "required": ["paperId", "title", "durationMinutes", "totalQuestions", "questions"],
+  "properties": {
+    "paperId": {
+      "type": "string",
+      "description": "Unique identifier for the exam paper"
+    },
+    "title": {
+      "type": "string",
+      "description": "Title of the test paper"
+    },
+    "subject": {
+      "type": "string",
+      "description": "Subject or branch name, e.g. General Aptitude / Computer Science"
+    },
+    "durationMinutes": {
+      "type": "integer",
+      "default": 40,
+      "description": "Total exam duration in minutes (e.g. 40)"
+    },
+    "totalQuestions": {
+      "type": "integer",
+      "default": 20,
+      "description": "Number of questions in the paper"
+    },
+    "totalMarks": {
+      "type": "number",
+      "default": 40,
+      "description": "Total marks for the paper"
+    },
+    "schedule": {
+      "type": "object",
+      "properties": {
+        "dailyStart": {
+          "type": "string",
+          "default": "21:00",
+          "description": "Daily exam start time in 24-hour HH:MM format (9:00 PM)"
+        },
+        "dailyEnd": {
+          "type": "string",
+          "default": "21:40",
+          "description": "Daily exam end time in 24-hour HH:MM format (9:40 PM)"
+        },
+        "resultTime": {
+          "type": "string",
+          "default": "21:50",
+          "description": "Daily result publication time in 24-hour HH:MM format (9:50 PM)"
+        }
+      }
+    },
+    "markingScheme": {
+      "type": "object",
+      "properties": {
+        "positiveMarks": { "type": "number", "default": 2 },
+        "negativeMarks": { "type": "number", "default": 0.66 }
+      }
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "question", "options", "correctAnswer"],
+        "properties": {
+          "id": { "type": "integer", "description": "Question sequence number (1 to 20)" },
+          "type": {
+            "type": "string",
+            "enum": ["MCQ", "MSQ", "NAT"],
+            "description": "MCQ = Multiple Choice (single correct), MSQ = Multiple Select, NAT = Numerical Answer Type"
+          },
+          "marks": { "type": "number", "default": 2 },
+          "negativeMarks": { "type": "number", "default": 0.66 },
+          "question": {
+            "type": "string",
+            "description": "Question statement supporting inline LaTeX ($...$) and block LaTeX ($$...$$)"
+          },
+          "diagramSvg": {
+            "type": "string",
+            "description": "Optional inline SVG string for figures/charts/diagrams"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "text"],
+              "properties": {
+                "id": { "type": "string", "enum": ["a", "b", "c", "d"] },
+                "text": { "type": "string", "description": "Option text supporting LaTeX" }
+              }
+            }
+          },
+          "correctAnswer": {
+            "description": "Option id string (e.g. 'b') for MCQ, array of option ids (e.g. ['a', 'c']) for MSQ, or number/range for NAT",
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } },
+              { "type": "number" },
+              {
+                "type": "object",
+                "properties": {
+                  "min": { "type": "number" },
+                  "max": { "type": "number" }
+                }
+              }
+            ]
+          },
+          "solution": {
+            "type": "string",
+            "description": "Detailed explanation with step-by-step mathematical derivation using LaTeX"
+          }
+        }
+      }
+    }
+  }
+}
