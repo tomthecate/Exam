@@ -16,11 +16,16 @@ class GateMockApp {
   }
 
   async init() {
+    // 1. Attach listeners FIRST so UI clicks and form submissions never fail or trigger page reloads
+    this.attachEventListeners();
+    // 2. Initialize candidate profile with multi-storage persistence
     this.initCandidateProfile();
+    // 3. Tickers and score checking
     this.setupScheduleTicker();
     this.checkImportedFriendScore();
+    // 4. Load paper
     await this.loadDefaultPaper();
-    this.attachEventListeners();
+    // 5. Evaluate route
     this.evaluateCurrentRoute();
   }
 
@@ -33,23 +38,95 @@ class GateMockApp {
     }
   }
 
-  initCandidateProfile() {
-    const saved = localStorage.getItem('gate_candidate');
-    if (saved) {
-      try {
-        this.candidate = JSON.parse(saved);
-      } catch (e) {
-        this.candidate = { name: 'Candidate', rollNo: 'GATE-2026-01' };
-      }
-    } else {
-      this.candidate = { name: 'Candidate', rollNo: `GATE-${Math.floor(1000 + Math.random() * 9000)}` };
-      // Show candidate prompt on first visit
-      setTimeout(() => {
-        const modal = document.getElementById('candidate-login-modal');
-        if (modal) modal.style.display = 'flex';
-      }, 300);
+  getSavedCandidate() {
+    // 1. Current in-memory candidate
+    if (this.candidate && this.candidate.name && this.candidate.name.trim() && this.candidate.name !== 'Candidate') {
+      return this.candidate;
     }
+    if (window._gate_candidate && window._gate_candidate.name && window._gate_candidate.name.trim() && window._gate_candidate.name !== 'Candidate') {
+      return window._gate_candidate;
+    }
+
+    // 2. LocalStorage
+    try {
+      const ls = localStorage.getItem('gate_candidate');
+      if (ls) {
+        const parsed = JSON.parse(ls);
+        if (parsed && parsed.name && parsed.name.trim() && parsed.name !== 'Candidate') {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+
+    // 3. SessionStorage
+    try {
+      const ss = sessionStorage.getItem('gate_candidate');
+      if (ss) {
+        const parsed = JSON.parse(ss);
+        if (parsed && parsed.name && parsed.name.trim() && parsed.name !== 'Candidate') {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+
+    // 4. Document Cookie
+    try {
+      const match = document.cookie.match(/(?:^|;\s*)gate_candidate=([^;]+)/);
+      if (match) {
+        const parsed = JSON.parse(decodeURIComponent(match[1]));
+        if (parsed && parsed.name && parsed.name.trim() && parsed.name !== 'Candidate') {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+
+    return null;
+  }
+
+  initCandidateProfile() {
+    const saved = this.getSavedCandidate();
+    if (saved) {
+      this.candidate = saved;
+      window._gate_candidate = saved;
+      this.updateCandidateHeader();
+      const modal = document.getElementById('candidate-login-modal');
+      if (modal) modal.style.display = 'none';
+      return;
+    }
+
+    // Default candidate state if not yet set
+    this.candidate = {
+      name: 'Candidate',
+      rollNo: `GATE-${Math.floor(1000 + Math.random() * 9000)}`
+    };
     this.updateCandidateHeader();
+
+    // Check server if running with backend
+    try {
+      fetch('/api/candidate')
+        .then(r => r.ok ? r.json() : null)
+        .then(serverCand => {
+          if (serverCand && serverCand.name && serverCand.name.trim() && serverCand.name !== 'Candidate') {
+            this.setCandidate(serverCand.name, serverCand.rollNo);
+            const modal = document.getElementById('candidate-login-modal');
+            if (modal) modal.style.display = 'none';
+          }
+        })
+        .catch(() => {});
+    } catch (e) {}
+
+    // Prompt candidate details on first visit if not saved
+    setTimeout(() => {
+      if (this.candidate && this.candidate.name && this.candidate.name.trim() && this.candidate.name !== 'Candidate') {
+        return;
+      }
+      const modal = document.getElementById('candidate-login-modal');
+      if (modal) {
+        modal.style.display = 'flex';
+        const inputName = document.getElementById('input-candidate-name');
+        if (inputName) inputName.focus();
+      }
+    }, 400);
   }
 
   updateCandidateHeader() {
@@ -87,20 +164,63 @@ class GateMockApp {
 
   setCandidate(name, rollNo) {
     const cleanName = (name || 'Candidate').trim();
-    const cleanRoll = (rollNo || `GATE-${Math.floor(1000 + Math.random() * 9000)}`).trim();
+    const cleanRoll = (rollNo || (this.candidate && this.candidate.rollNo) || `GATE-${Math.floor(1000 + Math.random() * 9000)}`).trim();
 
     this.candidate = {
       name: cleanName,
       rollNo: cleanRoll
     };
+    window._gate_candidate = this.candidate;
 
+    // 1. LocalStorage
     try {
       localStorage.setItem('gate_candidate', JSON.stringify(this.candidate));
     } catch (e) {
       console.warn('Could not save candidate to localStorage', e);
     }
 
+    // 2. SessionStorage
+    try {
+      sessionStorage.setItem('gate_candidate', JSON.stringify(this.candidate));
+    } catch (e) {}
+
+    // 3. Document Cookie (30-day expiry)
+    try {
+      const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
+      document.cookie = `gate_candidate=${encodeURIComponent(JSON.stringify(this.candidate))}; expires=${expires}; path=/; SameSite=Lax`;
+    } catch (e) {}
+
+    // 4. Server API sync
+    try {
+      fetch('/api/candidate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.candidate)
+      }).catch(() => {});
+    } catch (e) {}
+
     this.updateCandidateHeader();
+  }
+
+  saveCandidateFromModal() {
+    const nameInput = document.getElementById('input-candidate-name');
+    const rollInput = document.getElementById('input-candidate-roll');
+    const name = (nameInput ? nameInput.value : '').trim();
+    const roll = (rollInput ? rollInput.value : '').trim();
+
+    if (!name) {
+      alert('Please enter your name.');
+      if (nameInput) nameInput.focus();
+      return false;
+    }
+
+    this.setCandidate(name, roll);
+
+    const modal = document.getElementById('candidate-login-modal');
+    if (modal) {
+      modal.style.display = 'none';
+    }
+    return false;
   }
 
   async loadDefaultPaper() {
@@ -111,6 +231,7 @@ class GateMockApp {
         this.currentPaper = await resp.json();
         this.applyPaperSchedule(this.currentPaper);
         document.getElementById('paper-header-title').textContent = this.currentPaper.title;
+        this.updateCandidateHeader();
         return;
       }
     } catch (e) {}
@@ -122,6 +243,7 @@ class GateMockApp {
         this.currentPaper = await resp.json();
         this.applyPaperSchedule(this.currentPaper);
         document.getElementById('paper-header-title').textContent = this.currentPaper.title;
+        this.updateCandidateHeader();
         return;
       }
     } catch (e) {}
@@ -131,10 +253,12 @@ class GateMockApp {
       this.currentPaper = window.SAMPLE_PAPER_DATA;
       this.applyPaperSchedule(this.currentPaper);
       document.getElementById('paper-header-title').textContent = this.currentPaper.title;
+      this.updateCandidateHeader();
       return;
     }
 
     this.currentPaper = JsonValidator.getTemplate();
+    this.updateCandidateHeader();
   }
 
   applyPaperSchedule(paper) {
@@ -654,24 +778,38 @@ class GateMockApp {
 
   attachEventListeners() {
     // Top Bar Calculator
-    document.getElementById('btn-calculator').addEventListener('click', () => {
-      this.calculator.toggle();
-    });
+    const btnCalc = document.getElementById('btn-calculator');
+    if (btnCalc) {
+      btnCalc.addEventListener('click', () => {
+        this.calculator.toggle();
+      });
+    }
 
     // Top Bar Question Paper view
-    document.getElementById('btn-view-paper').addEventListener('click', () => {
-      this.showFullPaperModal();
-    });
+    const btnPaper = document.getElementById('btn-view-paper');
+    if (btnPaper) {
+      btnPaper.addEventListener('click', () => {
+        this.showFullPaperModal();
+      });
+    }
 
     // Instructions button
-    document.getElementById('btn-instructions').addEventListener('click', () => {
-      document.getElementById('instructions-modal').style.display = 'flex';
-    });
+    const btnInst = document.getElementById('btn-instructions');
+    if (btnInst) {
+      btnInst.addEventListener('click', () => {
+        const modal = document.getElementById('instructions-modal');
+        if (modal) modal.style.display = 'flex';
+      });
+    }
 
-    // Upload JSON Paper button
-    document.getElementById('btn-upload-json').addEventListener('click', () => {
-      document.getElementById('upload-modal').style.display = 'flex';
-    });
+    // Upload JSON Paper button (safe guard if button exists)
+    const btnUpload = document.getElementById('btn-upload-json');
+    if (btnUpload) {
+      btnUpload.addEventListener('click', () => {
+        const modal = document.getElementById('upload-modal');
+        if (modal) modal.style.display = 'flex';
+      });
+    }
 
     // Leaderboard button in header
     const btnHeaderLead = document.getElementById('btn-header-leaderboard');
@@ -708,6 +846,7 @@ class GateMockApp {
     if (btnImportCode) {
       btnImportCode.addEventListener('click', () => {
         const input = document.getElementById('input-friend-code');
+        if (!input) return;
         const val = input.value.trim();
         if (!val) return alert('Please enter or paste a score link or code.');
 
@@ -739,7 +878,7 @@ class GateMockApp {
       if (modal) {
         const nameInput = document.getElementById('input-candidate-name');
         const rollInput = document.getElementById('input-candidate-roll');
-        if (nameInput && this.candidate && this.candidate.name !== 'Candidate') {
+        if (nameInput && this.candidate && this.candidate.name && this.candidate.name !== 'Candidate') {
           nameInput.value = this.candidate.name;
         }
         if (rollInput && this.candidate && this.candidate.rollNo) {
@@ -770,11 +909,15 @@ class GateMockApp {
     if (candForm) {
       candForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        const name = document.getElementById('input-candidate-name').value.trim();
-        const roll = document.getElementById('input-candidate-roll').value.trim();
-        if (!name) return alert('Please enter your name.');
-        this.setCandidate(name, roll);
-        document.getElementById('candidate-login-modal').style.display = 'none';
+        this.saveCandidateFromModal();
+      });
+    }
+
+    const btnCandSubmit = document.getElementById('btn-candidate-login-submit');
+    if (btnCandSubmit) {
+      btnCandSubmit.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.saveCandidateFromModal();
       });
     }
 
@@ -782,87 +925,124 @@ class GateMockApp {
     const btnCandClose = document.getElementById('btn-candidate-modal-close');
     if (btnCandClose) {
       btnCandClose.addEventListener('click', () => {
-        document.getElementById('candidate-login-modal').style.display = 'none';
+        const modal = document.getElementById('candidate-login-modal');
+        if (modal) modal.style.display = 'none';
       });
     }
 
     const btnCandCancel = document.getElementById('btn-candidate-modal-cancel');
     if (btnCandCancel) {
       btnCandCancel.addEventListener('click', () => {
-        document.getElementById('candidate-login-modal').style.display = 'none';
+        const modal = document.getElementById('candidate-login-modal');
+        if (modal) modal.style.display = 'none';
       });
     }
 
     // Start Exam from Lobby
-    document.getElementById('btn-start-lobby-exam').addEventListener('click', () => {
-      const state = this.scheduleManager.getCurrentState();
-      if (this.scheduleManager.mode === 'PRACTICE' || state.phase === 'EXAM_LIVE') {
-        this.startExam();
-      }
-    });
+    const btnStartExam = document.getElementById('btn-start-lobby-exam');
+    if (btnStartExam) {
+      btnStartExam.addEventListener('click', () => {
+        const state = this.scheduleManager.getCurrentState();
+        if (this.scheduleManager.mode === 'PRACTICE' || state.phase === 'EXAM_LIVE') {
+          this.startExam();
+        }
+      });
+    }
 
     // Action buttons inside exam
-    document.getElementById('btn-save-next').addEventListener('click', () => {
-      this.examEngine.saveAndNext();
-    });
+    const btnSaveNext = document.getElementById('btn-save-next');
+    if (btnSaveNext) {
+      btnSaveNext.addEventListener('click', () => {
+        if (this.examEngine) this.examEngine.saveAndNext();
+      });
+    }
 
-    document.getElementById('btn-mark-review').addEventListener('click', () => {
-      this.examEngine.markForReviewAndNext();
-    });
+    const btnMarkReview = document.getElementById('btn-mark-review');
+    if (btnMarkReview) {
+      btnMarkReview.addEventListener('click', () => {
+        if (this.examEngine) this.examEngine.markForReviewAndNext();
+      });
+    }
 
-    document.getElementById('btn-clear-response').addEventListener('click', () => {
-      this.examEngine.clearResponse();
-    });
+    const btnClearResp = document.getElementById('btn-clear-response');
+    if (btnClearResp) {
+      btnClearResp.addEventListener('click', () => {
+        if (this.examEngine) this.examEngine.clearResponse();
+      });
+    }
 
-    document.getElementById('btn-prev-q').addEventListener('click', () => {
-      this.examEngine.prevQuestion();
-    });
+    const btnPrevQ = document.getElementById('btn-prev-q');
+    if (btnPrevQ) {
+      btnPrevQ.addEventListener('click', () => {
+        if (this.examEngine) this.examEngine.prevQuestion();
+      });
+    }
 
-    document.getElementById('btn-submit-exam').addEventListener('click', () => {
-      this.showSubmitModal();
-    });
+    const btnSubmitExam = document.getElementById('btn-submit-exam');
+    if (btnSubmitExam) {
+      btnSubmitExam.addEventListener('click', () => {
+        this.showSubmitModal();
+      });
+    }
 
     // Submit confirmation modal actions
-    document.getElementById('modal-btn-confirm-submit').addEventListener('click', () => {
-      document.getElementById('submit-confirm-modal').style.display = 'none';
-      this.submitExam();
-    });
+    const btnConfirmSubmit = document.getElementById('modal-btn-confirm-submit');
+    if (btnConfirmSubmit) {
+      btnConfirmSubmit.addEventListener('click', () => {
+        const modal = document.getElementById('submit-confirm-modal');
+        if (modal) modal.style.display = 'none';
+        this.submitExam();
+      });
+    }
 
-    document.getElementById('modal-btn-cancel-submit').addEventListener('click', () => {
-      document.getElementById('submit-confirm-modal').style.display = 'none';
-    });
+    const btnCancelSubmit = document.getElementById('modal-btn-cancel-submit');
+    if (btnCancelSubmit) {
+      btnCancelSubmit.addEventListener('click', () => {
+        const modal = document.getElementById('submit-confirm-modal');
+        if (modal) modal.style.display = 'none';
+      });
+    }
 
     // Mode Switcher buttons
-    document.getElementById('btn-mode-scheduled').addEventListener('click', () => {
-      this.scheduleManager.setMode('SCHEDULED');
-      this.updateModeBanner();
-      this.evaluateCurrentRoute();
-    });
+    const btnModeSched = document.getElementById('btn-mode-scheduled');
+    if (btnModeSched) {
+      btnModeSched.addEventListener('click', () => {
+        this.scheduleManager.setMode('SCHEDULED');
+        this.updateModeBanner();
+        this.evaluateCurrentRoute();
+      });
+    }
 
-    document.getElementById('btn-mode-practice').addEventListener('click', () => {
-      this.scheduleManager.setMode('PRACTICE');
-      this.updateModeBanner();
-      this.evaluateCurrentRoute();
-    });
+    const btnModePrac = document.getElementById('btn-mode-practice');
+    if (btnModePrac) {
+      btnModePrac.addEventListener('click', () => {
+        this.scheduleManager.setMode('PRACTICE');
+        this.updateModeBanner();
+        this.evaluateCurrentRoute();
+      });
+    }
 
     // Time simulator dropdown
-    document.getElementById('select-time-warp').addEventListener('change', (e) => {
-      const val = e.target.value;
-      if (val === 'real') {
-        this.scheduleManager.resetRealTime();
-      } else if (val === 'pre_exam') {
-        this.scheduleManager.simulateTime(20, 58, 0); // 8:58 PM
-      } else if (val === 'exam_start') {
-        this.scheduleManager.simulateTime(21, 0, 0);  // 9:00 PM
-      } else if (val === 'exam_ending') {
-        this.scheduleManager.simulateTime(21, 39, 30); // 9:39:30 PM
-      } else if (val === 'waiting_results') {
-        this.scheduleManager.simulateTime(21, 45, 0); // 9:45 PM
-      } else if (val === 'results_out') {
-        this.scheduleManager.simulateTime(21, 50, 0); // 9:50 PM
-      }
-      this.evaluateCurrentRoute();
-    });
+    const selectWarp = document.getElementById('select-time-warp');
+    if (selectWarp) {
+      selectWarp.addEventListener('change', (e) => {
+        const val = e.target.value;
+        if (val === 'real') {
+          this.scheduleManager.resetRealTime();
+        } else if (val === 'pre_exam') {
+          this.scheduleManager.simulateTime(20, 58, 0); // 8:58 PM
+        } else if (val === 'exam_start') {
+          this.scheduleManager.simulateTime(21, 0, 0);  // 9:00 PM
+        } else if (val === 'exam_ending') {
+          this.scheduleManager.simulateTime(21, 39, 30); // 9:39:30 PM
+        } else if (val === 'waiting_results') {
+          this.scheduleManager.simulateTime(21, 45, 0); // 9:45 PM
+        } else if (val === 'results_out') {
+          this.scheduleManager.simulateTime(21, 50, 0); // 9:50 PM
+        }
+        this.evaluateCurrentRoute();
+      });
+    }
 
     // Results filter buttons
     document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -875,18 +1055,24 @@ class GateMockApp {
     });
 
     // Back to Home from results
-    document.getElementById('btn-results-home').addEventListener('click', () => {
-      this.currentResult = null;
-      this.examEngine = null;
-      this.evaluateCurrentRoute();
-    });
+    const btnResHome = document.getElementById('btn-results-home');
+    if (btnResHome) {
+      btnResHome.addEventListener('click', () => {
+        this.currentResult = null;
+        this.examEngine = null;
+        this.evaluateCurrentRoute();
+      });
+    }
 
     // Retake in practice mode
-    document.getElementById('btn-results-retake').addEventListener('click', () => {
-      this.scheduleManager.setMode('PRACTICE');
-      this.updateModeBanner();
-      this.startExam();
-    });
+    const btnResRetake = document.getElementById('btn-results-retake');
+    if (btnResRetake) {
+      btnResRetake.addEventListener('click', () => {
+        this.scheduleManager.setMode('PRACTICE');
+        this.updateModeBanner();
+        this.startExam();
+      });
+    }
 
     // Modal close buttons
     document.querySelectorAll('.modal-close, .modal-cancel-btn').forEach(btn => {
@@ -897,32 +1083,37 @@ class GateMockApp {
 
     // JSON file upload handler
     const fileInput = document.getElementById('json-file-input');
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const parsed = JSON.parse(event.target.result);
-          this.handleUploadedJson(parsed);
-        } catch (err) {
-          alert('Error parsing JSON file: ' + err.message);
-        }
-      };
-      reader.readAsText(file);
-    });
+    if (fileInput) {
+      fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const parsed = JSON.parse(event.target.result);
+            this.handleUploadedJson(parsed);
+          } catch (err) {
+            alert('Error parsing JSON file: ' + err.message);
+          }
+        };
+        reader.readAsText(file);
+      });
+    }
 
     // Download template JSON button
-    document.getElementById('btn-download-template').addEventListener('click', () => {
-      const template = JsonValidator.getTemplate();
-      const blob = new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'gate_question_paper_template.json';
-      a.click();
-      URL.revokeObjectURL(url);
-    });
+    const btnDownloadTpl = document.getElementById('btn-download-template');
+    if (btnDownloadTpl) {
+      btnDownloadTpl.addEventListener('click', () => {
+        const template = JsonValidator.getTemplate();
+        const blob = new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'gate_question_paper_template.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    }
   }
 
   handleUploadedJson(paper) {

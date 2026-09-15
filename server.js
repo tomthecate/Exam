@@ -14,6 +14,7 @@ const BASE_DIR = __dirname;
 const PAPERS_DIR = path.join(BASE_DIR, 'data', 'papers');
 const SUBMISSIONS_DIR = path.join(BASE_DIR, 'data', 'submissions');
 const SETTINGS_FILE = path.join(BASE_DIR, 'data', 'settings.json');
+const CANDIDATE_FILE = path.join(BASE_DIR, 'data', 'candidate.json');
 
 // Ensure directories exist
 if (!fs.existsSync(PAPERS_DIR)) fs.mkdirSync(PAPERS_DIR, { recursive: true });
@@ -333,6 +334,30 @@ const server = http.createServer(async (req, res) => {
       totalCandidates: submissions.length,
       leaderboard: submissions
     });
+  }
+
+  // 10. Candidate Profile Persistence
+  if (req.method === 'GET' && pathname === '/api/candidate') {
+    if (fs.existsSync(CANDIDATE_FILE)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(CANDIDATE_FILE, 'utf8'));
+        return sendJson(res, 200, data);
+      } catch (e) {}
+    }
+    return sendJson(res, 404, { error: 'No candidate profile saved' });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/candidate') {
+    try {
+      const body = await parseJsonBody(req);
+      if (body && body.name) {
+        fs.writeFileSync(CANDIDATE_FILE, JSON.stringify(body, null, 2), 'utf8');
+        return sendJson(res, 200, { success: true, candidate: body });
+      }
+      return sendJson(res, 400, { error: 'Invalid candidate profile format.' });
+    } catch (e) {
+      return sendJson(res, 500, { error: 'Failed to save candidate: ' + e.message });
+    }
   }
 
   // --- STATIC FILE SERVING ---

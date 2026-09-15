@@ -448,22 +448,22 @@
       <h2 style="font-size:20px; font-weight:800; color:#1e293b; margin-bottom:6px;">Candidate Details</h2>
       <p style="font-size:13px; color:#64748b; margin-bottom:20px;">Please enter your name and roll number to register your attempt on the examination leaderboard.</p>
 
-      <form id="candidate-login-form">
+      <form id="candidate-login-form" onsubmit="event.preventDefault(); window.app && window.app.saveCandidateFromModal(); return false;">
         <div class="form-group" style="text-align:left;">
           <label class="form-label" for="input-candidate-name">Full Name *</label>
-          <input type="text" id="input-candidate-name" class="form-control" placeholder="e.g. Rahul Sharma" required autocomplete="name">
+          <input type="text" id="input-candidate-name" class="form-control" placeholder="e.g. Rahul Sharma" required autocomplete="name" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.app && window.app.saveCandidateFromModal();}">
         </div>
 
         <div class="form-group" style="text-align:left; margin-bottom:20px;">
           <label class="form-label" for="input-candidate-roll">Roll Number / ID</label>
-          <input type="text" id="input-candidate-roll" class="form-control" placeholder="e.g. GATE-2026-01" autocomplete="off">
+          <input type="text" id="input-candidate-roll" class="form-control" placeholder="e.g. GATE-2026-01" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.app && window.app.saveCandidateFromModal();}">
         </div>
 
         <div style="display:flex; gap:8px;">
           <button type="button" id="btn-candidate-modal-cancel" class="btn-secondary-action" style="flex:1; justify-content:center;">
             Cancel
           </button>
-          <button type="submit" id="btn-candidate-login-submit" class="btn-primary-action" style="flex:2; justify-content:center;">
+          <button type="button" id="btn-candidate-login-submit" class="btn-primary-action" style="flex:2; justify-content:center;" onclick="window.app && window.app.saveCandidateFromModal()">
             Save &amp; Enter Portal &rarr;
           </button>
         </div>
