@@ -42,31 +42,64 @@ class GateMockApp {
         this.candidate = { name: 'Candidate', rollNo: 'GATE-2026-01' };
       }
     } else {
-      this.candidate = { name: 'Candidate', rollNo: 'GATE-2026-01' };
-      // Show candidate prompt
+      this.candidate = { name: 'Candidate', rollNo: `GATE-${Math.floor(1000 + Math.random() * 9000)}` };
+      // Show candidate prompt on first visit
       setTimeout(() => {
         const modal = document.getElementById('candidate-login-modal');
         if (modal) modal.style.display = 'flex';
-      }, 500);
+      }, 300);
     }
     this.updateCandidateHeader();
   }
 
   updateCandidateHeader() {
+    if (!this.candidate) return;
+
+    // Header candidate display
     const nameEl = document.querySelector('.candidate-name');
     const rollEl = document.querySelector('.candidate-id');
     const avatarEl = document.querySelector('.candidate-avatar');
-    if (nameEl && this.candidate) nameEl.textContent = this.candidate.name;
-    if (rollEl && this.candidate) rollEl.textContent = this.candidate.rollNo;
-    if (avatarEl && this.candidate) avatarEl.textContent = (this.candidate.name[0] || 'C').toUpperCase();
+    if (nameEl) nameEl.textContent = this.candidate.name;
+    if (rollEl) rollEl.textContent = this.candidate.rollNo;
+    if (avatarEl) avatarEl.textContent = (this.candidate.name[0] || 'C').toUpperCase();
+
+    // Exam palette sidebar candidate display
+    const examNameEl = document.getElementById('exam-cand-name');
+    const examRollEl = document.getElementById('exam-cand-roll');
+    const examAvatarEl = document.getElementById('exam-cand-avatar');
+    const examSubjectEl = document.getElementById('exam-cand-subject');
+
+    if (examNameEl) examNameEl.textContent = this.candidate.name;
+    if (examRollEl) examRollEl.textContent = `Roll: ${this.candidate.rollNo}`;
+    if (examAvatarEl) examAvatarEl.textContent = (this.candidate.name[0] || 'C').toUpperCase();
+    if (examSubjectEl && this.currentPaper) examSubjectEl.textContent = this.currentPaper.title || 'General Aptitude';
+
+    // Candidate modal inputs prefill
+    const inputName = document.getElementById('input-candidate-name');
+    const inputRoll = document.getElementById('input-candidate-roll');
+    if (inputName && this.candidate.name && this.candidate.name !== 'Candidate') {
+      inputName.value = this.candidate.name;
+    }
+    if (inputRoll && this.candidate.rollNo) {
+      inputRoll.value = this.candidate.rollNo;
+    }
   }
 
   setCandidate(name, rollNo) {
+    const cleanName = (name || 'Candidate').trim();
+    const cleanRoll = (rollNo || `GATE-${Math.floor(1000 + Math.random() * 9000)}`).trim();
+
     this.candidate = {
-      name: name || 'Candidate',
-      rollNo: rollNo || `GATE-${Math.floor(1000 + Math.random() * 9000)}`
+      name: cleanName,
+      rollNo: cleanRoll
     };
-    localStorage.setItem('gate_candidate', JSON.stringify(this.candidate));
+
+    try {
+      localStorage.setItem('gate_candidate', JSON.stringify(this.candidate));
+    } catch (e) {
+      console.warn('Could not save candidate to localStorage', e);
+    }
+
     this.updateCandidateHeader();
   }
 
@@ -423,7 +456,7 @@ class GateMockApp {
     const submission = {
       candidateName: this.candidate ? this.candidate.name : 'Candidate',
       rollNo: this.candidate ? this.candidate.rollNo : 'GATE-01',
-      paperId: this.currentPaper ? this.currentPaper.paperId : 'paper_01',
+      paperId: this.currentPaper ? (this.currentPaper.paperId || 'paper_01') : 'paper_01',
       score: res.totalScore,
       maxScore: res.maxPossibleMarks,
       accuracyPercent: res.accuracyPercent,
@@ -433,7 +466,35 @@ class GateMockApp {
       submittedAt: new Date().toISOString()
     };
 
-    // Save locally and to cloud via LeaderboardSync
+    // 1. Post to backend server if running
+    try {
+      await fetch('/api/exam/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(submission)
+      });
+    } catch (e) {
+      // Backend not running (e.g. GitHub Pages or file://)
+    }
+
+    // 2. Save to local storage submissions (for Admin Portal & local persistence)
+    try {
+      const localSubs = JSON.parse(localStorage.getItem('gate_local_submissions') || '[]');
+      const existingIdx = localSubs.findIndex(item => 
+        item.candidateName.toLowerCase() === submission.candidateName.toLowerCase() && 
+        item.paperId === submission.paperId
+      );
+      if (existingIdx >= 0) {
+        localSubs[existingIdx] = submission;
+      } else {
+        localSubs.push(submission);
+      }
+      localStorage.setItem('gate_local_submissions', JSON.stringify(localSubs));
+    } catch (e) {
+      console.warn('Could not save to gate_local_submissions', e);
+    }
+
+    // 3. Save locally and to cloud via LeaderboardSync
     this.leaderboardSync.saveSubmission(submission);
     this.latestSubmission = submission;
   }
@@ -446,17 +507,44 @@ class GateMockApp {
     modal.style.display = 'flex';
     tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:12px;">Loading score rankings...</td></tr>';
 
-    let list = await this.leaderboardSync.fetchFromCloud();
+    let list = [];
+
+    // 1. Try server leaderboard
+    try {
+      const resp = await fetch('/api/exam/leaderboard');
+      if (resp.ok) {
+        const data = await resp.json();
+        list = data.leaderboard || [];
+      }
+    } catch (e) {}
+
+    // 2. Fall back / merge with cloud sync
     if (!list || list.length === 0) {
-      list = this.leaderboardSync.getLeaderboard();
+      list = await this.leaderboardSync.fetchFromCloud();
     }
 
-    if (list.length === 0) {
+    // 3. Merge with local submissions
+    const localList = this.leaderboardSync.getLeaderboard();
+    const localSubs = JSON.parse(localStorage.getItem('gate_local_submissions') || '[]');
+
+    const mergedMap = new Map();
+    [...(list || []), ...localList, ...localSubs].forEach(item => {
+      if (!item || !item.candidateName) return;
+      const key = `${item.candidateName.toLowerCase()}_${item.paperId || 'default'}`;
+      if (!mergedMap.has(key) || mergedMap.get(key).score < item.score) {
+        mergedMap.set(key, item);
+      }
+    });
+
+    const mergedList = Array.from(mergedMap.values());
+    mergedList.sort((a, b) => b.score - a.score || b.accuracyPercent - a.accuracyPercent);
+
+    if (mergedList.length === 0) {
       tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:16px;color:#64748b;">No submissions recorded yet today. Take the exam to see your score on the leaderboard!</td></tr>';
       return;
     }
 
-    tableBody.innerHTML = list.map((s, idx) => {
+    tableBody.innerHTML = mergedList.map((s, idx) => {
       const isMe = this.candidate && s.candidateName.toLowerCase() === this.candidate.name.toLowerCase();
       return `
         <tr class="${idx === 0 ? 'leaderboard-rank-1' : (idx === 1 ? 'leaderboard-rank-2' : (idx === 2 ? 'leaderboard-rank-3' : ''))}">
@@ -495,6 +583,17 @@ class GateMockApp {
     document.getElementById('res-incorrect').textContent = res.incorrectCount;
     document.getElementById('res-unattempted').textContent = res.unattemptedCount;
     document.getElementById('res-accuracy').textContent = `${res.accuracyPercent}%`;
+
+    // Candidate details in Results header card
+    const nameEl = document.getElementById('res-candidate-name');
+    const rollEl = document.getElementById('res-candidate-roll');
+    const dateEl = document.getElementById('res-candidate-date');
+    const titleEl = document.getElementById('res-paper-title');
+
+    if (nameEl && this.candidate) nameEl.textContent = this.candidate.name;
+    if (rollEl && this.candidate) rollEl.textContent = this.candidate.rollNo;
+    if (dateEl) dateEl.textContent = new Date().toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+    if (titleEl && this.currentPaper) titleEl.textContent = this.currentPaper.title;
 
     this.renderSolutionList();
   }
@@ -634,31 +733,62 @@ class GateMockApp {
       });
     }
 
-    // Candidate profile click (to edit name)
+    // Candidate profile click (header)
+    const openCandidateModal = () => {
+      const modal = document.getElementById('candidate-login-modal');
+      if (modal) {
+        const nameInput = document.getElementById('input-candidate-name');
+        const rollInput = document.getElementById('input-candidate-roll');
+        if (nameInput && this.candidate && this.candidate.name !== 'Candidate') {
+          nameInput.value = this.candidate.name;
+        }
+        if (rollInput && this.candidate && this.candidate.rollNo) {
+          rollInput.value = this.candidate.rollNo;
+        }
+        modal.style.display = 'flex';
+        setTimeout(() => { if (nameInput) nameInput.focus(); }, 100);
+      }
+    };
+
     const candProf = document.querySelector('.candidate-profile');
     if (candProf) {
       candProf.style.cursor = 'pointer';
       candProf.title = 'Click to change candidate name';
-      candProf.addEventListener('click', () => {
-        const modal = document.getElementById('candidate-login-modal');
-        if (modal) {
-          const nameInput = document.getElementById('input-candidate-name');
-          const rollInput = document.getElementById('input-candidate-roll');
-          if (nameInput && this.candidate) nameInput.value = this.candidate.name;
-          if (rollInput && this.candidate) rollInput.value = this.candidate.rollNo;
-          modal.style.display = 'flex';
-        }
-      });
+      candProf.addEventListener('click', openCandidateModal);
     }
 
-    // Candidate login submit
-    const btnCandSubmit = document.getElementById('btn-candidate-login-submit');
-    if (btnCandSubmit) {
-      btnCandSubmit.addEventListener('click', () => {
+    // Candidate box inside exam palette click
+    const paletteCandBox = document.querySelector('.palette-candidate-box');
+    if (paletteCandBox) {
+      paletteCandBox.style.cursor = 'pointer';
+      paletteCandBox.title = 'Click to edit candidate details';
+      paletteCandBox.addEventListener('click', openCandidateModal);
+    }
+
+    // Candidate form submit (handles Enter key & button click)
+    const candForm = document.getElementById('candidate-login-form');
+    if (candForm) {
+      candForm.addEventListener('submit', (e) => {
+        e.preventDefault();
         const name = document.getElementById('input-candidate-name').value.trim();
         const roll = document.getElementById('input-candidate-roll').value.trim();
         if (!name) return alert('Please enter your name.');
         this.setCandidate(name, roll);
+        document.getElementById('candidate-login-modal').style.display = 'none';
+      });
+    }
+
+    // Candidate modal close & cancel buttons
+    const btnCandClose = document.getElementById('btn-candidate-modal-close');
+    if (btnCandClose) {
+      btnCandClose.addEventListener('click', () => {
+        document.getElementById('candidate-login-modal').style.display = 'none';
+      });
+    }
+
+    const btnCandCancel = document.getElementById('btn-candidate-modal-cancel');
+    if (btnCandCancel) {
+      btnCandCancel.addEventListener('click', () => {
         document.getElementById('candidate-login-modal').style.display = 'none';
       });
     }

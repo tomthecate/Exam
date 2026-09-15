@@ -182,6 +182,16 @@
 
       <!-- Right: Palette Sidebar -->
       <aside class="palette-sidebar">
+        <!-- Candidate Identity Tile (TCS iON Standard) -->
+        <div class="palette-candidate-box">
+          <div class="palette-cand-avatar" id="exam-cand-avatar">C</div>
+          <div class="palette-cand-info">
+            <div class="palette-cand-name" id="exam-cand-name">Candidate</div>
+            <div class="palette-cand-roll" id="exam-cand-roll">Roll: GATE-2026-01</div>
+            <div class="palette-cand-subject" id="exam-cand-subject">General Aptitude</div>
+          </div>
+        </div>
+
         <div class="palette-header">
           <div class="palette-title">Question Palette</div>
           <!-- Status Legend -->
@@ -255,7 +265,12 @@
         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:16px;">
           <div>
             <h1 style="font-size:22px; font-weight:800; color:#1e293b;">Performance Report &amp; Detailed Solutions</h1>
-            <p style="font-size:13px; color:#64748b;">CSIR NET / GATE General Aptitude Mock Paper</p>
+            <p style="font-size:13px; color:#64748b;" id="res-paper-title">CSIR NET / GATE General Aptitude Mock Paper</p>
+            <div style="margin-top:8px; font-size:13px; color:#334155; display:flex; gap:16px; flex-wrap:wrap; background:#f8fafc; padding:6px 12px; border-radius:6px; border:1px solid #e2e8f0;">
+              <span>Candidate: <strong id="res-candidate-name">Candidate</strong></span>
+              <span>Roll No: <strong id="res-candidate-roll">GATE-2026-01</strong></span>
+              <span>Attempted: <strong id="res-candidate-date">--</strong></span>
+            </div>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button class="btn-secondary-action" id="btn-results-copy-share" style="background:#2563eb;color:#fff;border-color:#2563eb;" title="Copy result link to send to friends">&#128279; Share Score Link</button>
@@ -427,24 +442,32 @@
 
   <!-- MODAL: CANDIDATE IDENTIFICATION / LOGIN -->
   <div id="candidate-login-modal" class="modal-backdrop" style="display:none;">
-    <div class="candidate-welcome-card">
+    <div class="candidate-welcome-card" style="position:relative;">
+      <button type="button" class="modal-close" id="btn-candidate-modal-close" style="position:absolute; top:12px; right:14px; background:none; border:none; font-size:22px; cursor:pointer; color:#64748b;">&times;</button>
       <div style="width:54px; height:54px; background:#dbeafe; color:#1e40af; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; font-size:24px;">&#128100;</div>
       <h2 style="font-size:20px; font-weight:800; color:#1e293b; margin-bottom:6px;">Candidate Details</h2>
-      <p style="font-size:13px; color:#64748b; margin-bottom:20px;">Please enter your name to register your attempt on the daily examination leaderboard.</p>
+      <p style="font-size:13px; color:#64748b; margin-bottom:20px;">Please enter your name and roll number to register your attempt on the examination leaderboard.</p>
 
-      <div class="form-group" style="text-align:left;">
-        <label class="form-label">Full Name:</label>
-        <input type="text" id="input-candidate-name" class="form-control" placeholder="e.g. Rahul Sharma" value="Candidate">
-      </div>
+      <form id="candidate-login-form">
+        <div class="form-group" style="text-align:left;">
+          <label class="form-label" for="input-candidate-name">Full Name *</label>
+          <input type="text" id="input-candidate-name" class="form-control" placeholder="e.g. Rahul Sharma" required autocomplete="name">
+        </div>
 
-      <div class="form-group" style="text-align:left; margin-bottom:24px;">
-        <label class="form-label">Roll Number / ID:</label>
-        <input type="text" id="input-candidate-roll" class="form-control" placeholder="e.g. GATE-2026-01" value="GATE-2026-01">
-      </div>
+        <div class="form-group" style="text-align:left; margin-bottom:20px;">
+          <label class="form-label" for="input-candidate-roll">Roll Number / ID</label>
+          <input type="text" id="input-candidate-roll" class="form-control" placeholder="e.g. GATE-2026-01" autocomplete="off">
+        </div>
 
-      <button id="btn-candidate-login-submit" class="btn-primary-action" style="width:100%; justify-content:center;">
-        Enter Examination Portal &rarr;
-      </button>
+        <div style="display:flex; gap:8px;">
+          <button type="button" id="btn-candidate-modal-cancel" class="btn-secondary-action" style="flex:1; justify-content:center;">
+            Cancel
+          </button>
+          <button type="submit" id="btn-candidate-login-submit" class="btn-primary-action" style="flex:2; justify-content:center;">
+            Save &amp; Enter Portal &rarr;
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 

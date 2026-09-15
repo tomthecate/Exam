@@ -448,21 +448,31 @@ class AdminPortal {
     if (!tableBody) return;
     tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:12px;">Loading submissions...</td></tr>';
 
+    let serverList = [];
     try {
       const resp = await fetch('/api/exam/leaderboard');
       if (resp.ok) {
         const data = await resp.json();
-        this.submissionsList = data.leaderboard || [];
-        this.renderSubmissionsTable(this.submissionsList);
-      } else {
-        this.renderSubmissionsTable([]);
+        serverList = data.leaderboard || [];
       }
-    } catch (e) {
-      // Local submissions fallback
-      const localSubs = JSON.parse(localStorage.getItem('gate_local_submissions') || '[]');
-      this.submissionsList = localSubs;
-      this.renderSubmissionsTable(localSubs);
-    }
+    } catch (e) {}
+
+    // Seamlessly merge server submissions with local offline submissions
+    const localSubs = JSON.parse(localStorage.getItem('gate_local_submissions') || '[]');
+    const globalSubs = JSON.parse(localStorage.getItem('gate_global_leaderboard') || '[]');
+
+    const map = new Map();
+    [...serverList, ...localSubs, ...globalSubs].forEach(item => {
+      if (!item || !item.candidateName) return;
+      const key = `${item.candidateName.toLowerCase()}_${item.paperId || 'default'}_${item.submittedAt || item.score}`;
+      if (!map.has(key)) {
+        map.set(key, item);
+      }
+    });
+
+    this.submissionsList = Array.from(map.values());
+    this.submissionsList.sort((a, b) => b.score - a.score || b.accuracyPercent - a.accuracyPercent);
+    this.renderSubmissionsTable(this.submissionsList);
   }
 
   renderSubmissionsTable(list) {
