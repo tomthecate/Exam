@@ -34,23 +34,41 @@ class GateCalculator {
   toggle() {
     this.isOpen = !this.isOpen;
     this.el.style.display = this.isOpen ? 'flex' : 'none';
+    this.syncTriggerState();
     if (this.isOpen) {
       this.ensureInViewport();
+      const closeButton = this.el.querySelector('#calc-close-btn');
+      if (closeButton) closeButton.focus({ preventScroll: true });
     }
   }
 
   open() {
     this.isOpen = true;
     this.el.style.display = 'flex';
+    this.syncTriggerState();
     this.ensureInViewport();
   }
 
   close() {
     this.isOpen = false;
     this.el.style.display = 'none';
+    this.syncTriggerState();
+  }
+
+  syncTriggerState() {
+    ['btn-calculator', 'btn-floating-calculator'].forEach(id => {
+      const trigger = document.getElementById(id);
+      if (trigger) trigger.setAttribute('aria-expanded', String(this.isOpen));
+    });
   }
 
   ensureInViewport() {
+    if (window.matchMedia('(max-width: 720px)').matches) {
+      this.el.style.top = 'auto';
+      this.el.style.right = '8px';
+      this.el.style.left = '8px';
+      return;
+    }
     const rect = this.el.getBoundingClientRect();
     const winWidth = window.innerWidth;
     const winHeight = window.innerHeight;
@@ -70,8 +88,8 @@ class GateCalculator {
           <span class="calc-title-text">GATE Virtual Scientific Calculator</span>
         </div>
         <div class="calc-header-controls">
-          <button type="button" id="calc-min-btn" class="calc-ctrl-btn" title="Minimize / Restore">&#8211;</button>
-          <button type="button" id="calc-close-btn" class="calc-ctrl-btn calc-close-btn" title="Close Calculator">&times;</button>
+          <button type="button" id="calc-min-btn" class="calc-ctrl-btn" title="Minimize / Restore" aria-label="Minimize calculator">&#8211;</button>
+          <button type="button" id="calc-close-btn" class="calc-ctrl-btn calc-close-btn" title="Close Calculator" aria-label="Close calculator">&times;</button>
         </div>
       </div>
 
@@ -242,7 +260,13 @@ class GateCalculator {
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.isOpen) {
         this.close();
+        const trigger = document.getElementById('btn-floating-calculator');
+        if (trigger) trigger.focus({ preventScroll: true });
       }
+    });
+
+    window.addEventListener('resize', () => {
+      if (this.isOpen) this.ensureInViewport();
     });
   }
 
@@ -307,6 +331,7 @@ class GateCalculator {
 
     // Mouse events
     handle.addEventListener('mousedown', (e) => {
+      if (window.matchMedia('(max-width: 720px)').matches) return;
       if (startDrag(e.clientX, e.clientY, e.target)) {
         const onMouseMove = (ev) => moveDrag(ev.clientX, ev.clientY);
         const onMouseUp = () => {
@@ -322,6 +347,7 @@ class GateCalculator {
 
     // Touch events
     handle.addEventListener('touchstart', (e) => {
+      if (window.matchMedia('(max-width: 720px)').matches) return;
       if (e.touches.length === 1) {
         const touch = e.touches[0];
         if (startDrag(touch.clientX, touch.clientY, e.target)) {

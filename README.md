@@ -18,15 +18,13 @@ A modern, high-fidelity Computer-Based Test (CBT) mock examination web applicati
   - Built-in **GATE Official Virtual Scientific Calculator** (supports $\sin$, $\cos$, $\tan$, $\log$, $\ln$, $\sqrt{x}$, $x^y$, $n!$, $\pi$, $e$).
   - Full Question Paper overview and Examination Instructions modals.
 
-- **Exam Duration & Daily Timing**:
-  - **40 Minutes** allocated for **20 Questions** (40 Total Marks).
-  - **Daily Schedule Mode**:
-    - **Before 9:00 PM**: Pre-exam waiting lobby with real-time countdown to 9:00 PM.
-    - **9:00 PM to 9:40 PM**: Live exam window. Timer counts down 40 minutes; automatic submission triggers at 9:40 PM sharp.
-    - **9:40 PM to 9:50 PM**: Evaluation lobby. System records responses and prepares analysis.
-    - **9:50 PM Onwards**: Results & detailed solutions published.
-  - **Practice Mode (Anytime)**: Allows taking an immediate 40-minute mock test at any time of day.
-  - **Time Simulator**: Quickly test each phase (8:58 PM lobby, 9:00 PM start, 9:39 PM final minute, 9:45 PM waiting, 9:50 PM results).
+- **Dynamic Duration & JSON Schedule**:
+  - Duration is always **2 minutes per question**. For example, 20 questions provide 40 minutes and 35 questions provide 70 minutes.
+  - The exam end is calculated from `schedule.examDate` + `schedule.startTime` + the derived duration; there is no configurable end-time override.
+  - Exam start and published-result date/time are declared in each paper JSON using `examDate`, `startTime`, `resultDate`, and `resultTime`.
+  - A candidate sees their detailed result immediately after manual submission or automatic timeout.
+  - **Practice Mode (Anytime)** uses the same dynamic duration rule.
+  - **Time Simulator** derives every simulated phase from the loaded paper rather than fixed clock times.
 
 - **LaTeX Scientific Notation**:
   - Full math rendering powered by KaTeX ($...$ for inline, $$...$$ for display equations).
@@ -37,6 +35,14 @@ A modern, high-fidelity Computer-Based Test (CBT) mock examination web applicati
   - Upload any custom `.json` question paper.
   - Built-in schema validator with real-time syntax checking and LaTeX preview.
   - One-click template download.
+
+- **Private Browser-Based Progress Tracking (GitHub Pages compatible)**:
+  - Keeps up to 30 complete attempts per candidate in the browser, including answers, marks, timing, and detailed solutions.
+  - Restores an unfinished test after an accidental refresh or browser restart.
+  - Includes a **My Progress** dashboard with best score, average accuracy, recent trend, and past-attempt review.
+  - Adds pace analysis and the slowest question to each performance report.
+  - Supports JSON backup and restore so progress can be moved to another browser or protected before browser data is cleared.
+  - No account or server is required. Data is private to the browser/device and is not synchronized automatically.
 
 ---
 
@@ -63,13 +69,13 @@ You can upload your own question papers using the **"Upload JSON"** button in th
   "paperId": "csir_net_gate_general_aptitude_01",
   "title": "CSIR NET / GATE General Aptitude Mock Paper",
   "subject": "General Aptitude (Part A / Paper 1)",
-  "durationMinutes": 40,
   "totalQuestions": 20,
   "totalMarks": 40,
   "schedule": {
-    "dailyStart": "21:00",
-    "dailyEnd": "21:40",
-    "resultTime": "21:50"
+    "examDate": "2026-09-18",
+    "startTime": "21:00",
+    "resultDate": "2026-09-18",
+    "resultTime": "21:40"
   },
   "markingScheme": {
     "positiveMarks": 2,

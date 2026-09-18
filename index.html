@@ -16,10 +16,10 @@
     <!-- Top Navigation Header -->
     <header class="gate-header">
       <div class="header-left">
-        <span class="gate-logo-badge">GATE CBT</span>
+        <span class="gate-logo-badge"><span>GATE</span><span>CBT</span></span>
         <div>
           <div class="paper-title" id="paper-header-title">CSIR NET / GATE General Aptitude Mock Paper</div>
-          <div class="paper-sub">40 Minutes &bull; 20 Questions &bull; 40 Marks</div>
+          <div class="paper-sub">Duration is calculated at 2 minutes per question</div>
         </div>
       </div>
 
@@ -30,7 +30,7 @@
         </div>
       </div>
 
-      <div class="header-actions">
+      <div class="header-actions" aria-label="Portal actions">
         <div id="header-exam-actions" style="display:none; gap:6px;">
           <button class="btn-header" id="btn-view-paper" title="View entire question paper">
             <span>&#128196; Question Paper</span>
@@ -38,8 +38,8 @@
           <button class="btn-header" id="btn-instructions" title="View exam instructions">
             <span>&#9432; Instructions</span>
           </button>
-          <button class="btn-header" id="btn-calculator" title="Open official GATE virtual calculator">
-            <span>&#129302; Calculator</span>
+          <button class="btn-header btn-calculator-header" id="btn-calculator" title="Open GATE virtual calculator" aria-controls="gate-calculator-container" aria-expanded="false">
+            <span class="calculator-icon" aria-hidden="true">123</span><span>Calculator</span>
           </button>
         </div>
 
@@ -47,11 +47,15 @@
           <span>&#127942; Leaderboard</span>
         </button>
 
+        <button class="btn-header" id="btn-header-progress" style="background:#0369a1;border-color:#0369a1;" title="View saved attempts and progress">
+          <span>&#128200; My Progress</span>
+        </button>
+
         <button class="btn-header" id="btn-header-admin" style="background:#7c3aed;border-color:#7c3aed;" title="Open Admin Portal to manage question papers">
           <span>&#9881; Admin Portal</span>
         </button>
 
-        <div class="candidate-profile" title="Click to change candidate name">
+        <div class="candidate-profile" title="Click to change candidate name" role="button" tabindex="0" aria-label="Edit candidate profile">
           <div class="candidate-avatar">C</div>
           <div class="candidate-meta">
             <div class="candidate-name">Candidate</div>
@@ -62,9 +66,9 @@
     </header>
 
     <!-- Mode and Time Bar -->
-    <div class="mode-banner">
+    <div class="mode-banner" id="mode-banner">
       <div style="display:flex; align-items:center; gap:12px;">
-        <span id="active-mode-badge" class="mode-badge scheduled">Scheduled Mode (Daily 9:00 PM - 9:40 PM)</span>
+        <span id="active-mode-badge" class="mode-badge scheduled">Scheduled Mode</span>
         <span style="font-size:12px; color:#64748b;">Current Time: <strong id="current-time-display">--:--:--</strong></span>
       </div>
 
@@ -76,11 +80,11 @@
         <span style="font-size:11px; color:#64748b; margin-left:6px;">Test Time Simulator:</span>
         <select id="select-time-warp" style="font-size:11px; padding:3px 6px; border:1px solid #cbd5e1; border-radius:4px;">
           <option value="real">Real System Clock</option>
-          <option value="pre_exam">Simulate 8:58 PM (Pre-Exam Lobby)</option>
-          <option value="exam_start">Simulate 9:00 PM (Exam Starts)</option>
-          <option value="exam_ending">Simulate 9:39 PM (Last Minute of Exam)</option>
-          <option value="waiting_results">Simulate 9:45 PM (Waiting for Results)</option>
-          <option value="results_out">Simulate 9:50 PM (Results Declared)</option>
+          <option value="pre_exam">Simulate Before Configured Start</option>
+          <option value="exam_start">Simulate Configured Exam Start</option>
+          <option value="exam_ending">Simulate Last Minute of Exam</option>
+          <option value="waiting_results">Simulate Before Published Result Time</option>
+          <option value="results_out">Simulate Published Result Time</option>
         </select>
       </div>
     </div>
@@ -95,7 +99,7 @@
         <div class="schedule-countdown-box">
           <div class="countdown-unit">
             <span class="countdown-digits" id="lobby-countdown">--:--</span>
-            <span class="countdown-label">Next Exam Countdown (9:00 PM)</span>
+            <span class="countdown-label" id="lobby-countdown-label">Next Exam Countdown</span>
           </div>
         </div>
 
@@ -106,7 +110,7 @@
           </div>
           <div class="info-tile">
             <div class="info-tile-title">Allocated Time</div>
-            <div class="info-tile-value" id="lobby-duration">40 Mins</div>
+            <div class="info-tile-value" id="lobby-duration">Calculating...</div>
           </div>
           <div class="info-tile">
             <div class="info-tile-title">Total Marks</div>
@@ -117,8 +121,9 @@
         <div style="background:#f1f5f9; border-radius:6px; padding:14px; margin-bottom:20px; text-align:left; font-size:13px;">
           <strong style="color:#1e293b;">Important Examination Guidelines:</strong>
           <ul style="margin:8px 0 0 20px; line-height:1.6; color:#475569;">
-            <li>Scheduled daily exam window: <strong>9:00 PM to 9:40 PM</strong>.</li>
-            <li>Results with detailed step-by-step mathematical solutions release at <strong>9:50 PM</strong>.</li>
+            <li id="guideline-exam-schedule">The exam schedule is loaded from the question-paper JSON.</li>
+            <li id="guideline-result-schedule">Results appear immediately after the exam ends.</li>
+            <li>Duration is calculated automatically at <strong>2 minutes per question</strong>.</li>
             <li>Marking scheme: <strong>+2 marks</strong> for correct response, <strong>-0.66 marks</strong> for wrong response (MCQ).</li>
             <li>You can use the <strong>Virtual Scientific Calculator</strong> at the top right anytime during the test.</li>
             <li>To practice right away at any time, click <strong>"Practice Mode (Anytime)"</strong> in the top bar!</li>
@@ -139,8 +144,13 @@
       <main class="question-viewport">
         <!-- Section Bar -->
         <div class="section-bar">
-          <span>Section: General Aptitude</span>
-          <span style="font-size:12px; color:#64748b;">Question Type: <strong id="q-type-label">MCQ</strong></span>
+          <span class="section-name">General Aptitude</span>
+          <div class="section-tools">
+            <span class="question-type">Question type: <strong id="q-type-label">MCQ</strong></span>
+            <button type="button" class="palette-toggle" id="btn-palette-toggle" aria-controls="exam-palette" aria-expanded="false">
+              <span aria-hidden="true">▦</span> Questions
+            </button>
+          </div>
         </div>
 
         <!-- Question Meta -->
@@ -181,7 +191,8 @@
       </main>
 
       <!-- Right: Palette Sidebar -->
-      <aside class="palette-sidebar">
+      <aside class="palette-sidebar" id="exam-palette" aria-label="Question palette">
+        <button type="button" class="palette-mobile-close" id="btn-palette-close" aria-label="Close question palette">&times;</button>
         <!-- Candidate Identity Tile (TCS iON Standard) -->
         <div class="palette-candidate-box">
           <div class="palette-cand-avatar" id="exam-cand-avatar">C</div>
@@ -231,9 +242,14 @@
           <button class="btn-submit-exam" id="btn-submit-exam">Submit Exam</button>
         </div>
       </aside>
+      <button type="button" class="floating-calc-trigger" id="btn-floating-calculator" aria-controls="gate-calculator-container" aria-expanded="false" title="Open virtual calculator">
+        <span class="floating-calc-icon" aria-hidden="true">123</span>
+        <span class="floating-calc-label">Calculator</span>
+      </button>
+      <button type="button" class="palette-scrim" id="palette-scrim" aria-label="Close question palette" tabindex="-1"></button>
     </div>
 
-    <!-- VIEW 3: WAITING FOR RESULTS (9:40 PM - 9:50 PM) -->
+    <!-- Legacy waiting view retained for compatibility; completed attempts now open results immediately. -->
     <div id="view-waiting-results" class="lobby-container" style="display:none;">
       <div class="lobby-card">
         <div class="lobby-icon" style="background:#fef3c7; color:#d97706;">&#9989;</div>
@@ -243,12 +259,12 @@
         <div class="schedule-countdown-box" style="background:#1e3a8a;">
           <div class="countdown-unit">
             <span class="countdown-digits" id="waiting-results-countdown" style="color:#67e8f9;">--:--</span>
-            <span class="countdown-label">Results &amp; Solutions Published at 9:50 PM</span>
+            <span class="countdown-label">Preparing Results &amp; Solutions</span>
           </div>
         </div>
 
         <p style="font-size:14px; color:#475569; margin-bottom:24px;">
-          The evaluation window will conclude at <strong>9:50 PM</strong>, at which time your detailed score, accuracy analysis, and complete step-by-step LaTeX solutions will be unlocked.
+          Your detailed score, accuracy analysis, and complete step-by-step solutions are being opened now.
         </p>
 
         <div class="lobby-actions">
@@ -303,6 +319,7 @@
             <div class="stat-lbl">Accuracy</div>
           </div>
         </div>
+        <div id="result-insights" class="result-insights" aria-live="polite"></div>
       </div>
 
       <!-- Filter Controls -->
@@ -622,29 +639,28 @@
 
       <!-- Tab 4: Schedule & GitHub Settings -->
       <div id="admin-tab-settings" class="admin-body" style="display:none;">
-        <h3 style="font-size:16px; font-weight:700; color:#1e293b; margin-bottom:14px;">Daily Exam Timetable Configuration</h3>
+        <h3 style="font-size:16px; font-weight:700; color:#1e293b; margin-bottom:14px;">Exam Timetable Configuration</h3>
         <div style="max-width:540px;">
           <div class="form-group">
-            <label class="form-label">Daily Exam Start Time (24h HH:MM):</label>
-            <input type="time" id="settings-start-time" class="form-control" value="21:00">
-            <div style="font-size:11px; color:#64748b;">Default: 21:00 (9:00 PM)</div>
+            <label class="form-label">Exam Date:</label>
+            <input type="date" id="settings-exam-date" class="form-control">
           </div>
 
           <div class="form-group">
-            <label class="form-label">Daily Exam End / Auto-Submit Time:</label>
-            <input type="time" id="settings-end-time" class="form-control" value="21:40">
-            <div style="font-size:11px; color:#64748b;">Default: 21:40 (9:40 PM)</div>
+            <label class="form-label">Exam Start Time:</label>
+            <input type="time" id="settings-start-time" class="form-control">
+            <div style="font-size:11px; color:#64748b;">End time is calculated automatically: 2 minutes × question count.</div>
           </div>
 
           <div class="form-group">
-            <label class="form-label">Results &amp; Solutions Published Time:</label>
-            <input type="time" id="settings-result-time" class="form-control" value="21:50">
-            <div style="font-size:11px; color:#64748b;">Default: 21:50 (9:50 PM)</div>
+            <label class="form-label">Published Result Date:</label>
+            <input type="date" id="settings-result-date" class="form-control">
           </div>
 
           <div class="form-group">
-            <label class="form-label">Test Duration (Minutes):</label>
-            <input type="number" id="settings-duration" class="form-control" value="40" min="1" max="180">
+            <label class="form-label">Published Result Time:</label>
+            <input type="time" id="settings-result-time" class="form-control">
+            <div style="font-size:11px; color:#64748b;">Candidates still see their own result immediately upon submission or timeout.</div>
           </div>
 
           <button id="btn-save-schedule-settings" class="btn-primary-action" style="margin-top:10px; margin-bottom:24px;">
@@ -730,8 +746,32 @@
     </div>
   </div>
 
+  <!-- MODAL: LOCAL PROGRESS HISTORY -->
+  <div id="progress-modal" class="modal-backdrop" style="display:none;">
+    <div class="modal-content progress-modal-content">
+      <div class="modal-header" style="background:#0369a1;">
+        <span class="modal-title">&#128200; My Progress &amp; Saved Attempts</span>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="storage-note">Saved privately in this browser. Export a backup before clearing browser data or moving to another device.</p>
+        <div id="progress-summary" class="progress-summary"></div>
+        <div class="progress-toolbar">
+          <button class="mode-btn" id="btn-export-progress">&#11015; Export Backup</button>
+          <button class="mode-btn" id="btn-import-progress">&#11014; Import Backup</button>
+          <input type="file" id="progress-import-input" accept="application/json,.json" hidden>
+          <button class="mode-btn danger-button" id="btn-clear-progress">Clear History</button>
+        </div>
+        <div id="progress-attempts" class="progress-attempts"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary-action modal-cancel-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Scientific Calculator Container (Draggable Floating Window) -->
-  <div id="gate-calculator-container" class="gate-calc-window" style="display:none;"></div>
+  <div id="gate-calculator-container" class="gate-calc-window" style="display:none;" role="dialog" aria-label="GATE virtual scientific calculator"></div>
 
   <!-- KaTeX JavaScript Engine -->
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
@@ -740,12 +780,13 @@
   <!-- Application Scripts -->
   <script src="./js/katex-renderer.js"></script>
   <script src="./js/gate-calculator.js"></script>
-  <script src="./js/schedule-manager.js"></script>
-  <script src="./js/json-validator.js"></script>
+  <script src="./js/schedule-manager.js?v=20260918-2"></script>
+  <script src="./js/json-validator.js?v=20260918-2"></script>
   <script src="./js/github-sync.js"></script>
   <script src="./js/leaderboard-sync.js"></script>
-  <script src="./js/exam-engine.js"></script>
-  <script src="./js/app.js"></script>
-  <script src="./js/admin.js"></script>
+  <script src="./js/exam-storage.js"></script>
+  <script src="./js/exam-engine.js?v=20260918-2"></script>
+  <script src="./js/app.js?v=20260918-2"></script>
+  <script src="./js/admin.js?v=20260918-2"></script>
 </body>
 </html>

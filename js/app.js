@@ -8,8 +8,12 @@ class GateMockApp {
     this.scheduleManager = new ScheduleManager();
     this.calculator = new GateCalculator('gate-calculator-container');
     this.leaderboardSync = new LeaderboardSync();
+    this.examStorage = new ExamStorage();
     this.currentResult = null;
     this.latestSubmission = null;
+    this.currentAttempt = null;
+    this.examStartedAt = null;
+    this.lastDraftSaveSecond = null;
     this.activeFilter = 'ALL'; // 'ALL', 'CORRECT', 'INCORRECT', 'UNATTEMPTED'
 
     this.init();
@@ -258,24 +262,40 @@ class GateMockApp {
     }
 
     this.currentPaper = JsonValidator.getTemplate();
+    this.applyPaperSchedule(this.currentPaper);
     this.updateCandidateHeader();
   }
 
   applyPaperSchedule(paper) {
-    if (paper && paper.schedule) {
-      const [sh, sm] = (paper.schedule.dailyStart || '21:00').split(':').map(Number);
-      const [eh, em] = (paper.schedule.dailyEnd || '21:40').split(':').map(Number);
-      const [rh, rm] = (paper.schedule.resultTime || '21:50').split(':').map(Number);
-      this.scheduleManager.startHour = sh;
-      this.scheduleManager.startMinute = sm;
-      this.scheduleManager.endHour = eh;
-      this.scheduleManager.endMinute = em;
-      this.scheduleManager.resultHour = rh;
-      this.scheduleManager.resultMinute = rm;
-    }
-    if (paper && paper.durationMinutes) {
-      this.scheduleManager.durationMinutes = paper.durationMinutes;
-    }
+    if (!paper) return;
+    this.scheduleManager.setScheduleFromPaper(paper);
+    this.updatePaperSummary();
+    this.updateModeBanner();
+  }
+
+  formatScheduleDate(date) {
+    return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  }
+
+  updatePaperSummary() {
+    if (!this.currentPaper) return;
+    const count = this.currentPaper.questions.length;
+    const duration = count * 2;
+    const marks = this.currentPaper.totalMarks || this.currentPaper.questions.reduce((sum, q) => sum + Number(q.marks ?? 2), 0);
+    const summary = document.querySelector('.paper-sub');
+    if (summary) summary.textContent = `${duration} Minutes • ${count} Questions • ${marks} Marks`;
+    const timer = document.getElementById('exam-timer');
+    if (timer) timer.textContent = this.scheduleManager.formatTime(duration * 60);
+
+    const start = this.scheduleManager.getExamStartTime();
+    const end = this.scheduleManager.getExamEndTime();
+    const result = this.scheduleManager.getResultTime();
+    const countdownLabel = document.getElementById('lobby-countdown-label');
+    if (countdownLabel) countdownLabel.textContent = `Exam starts ${this.formatScheduleDate(start)}`;
+    const scheduleGuideline = document.getElementById('guideline-exam-schedule');
+    if (scheduleGuideline) scheduleGuideline.textContent = `Scheduled exam: ${this.formatScheduleDate(start)} to ${this.formatScheduleDate(end)}.`;
+    const resultGuideline = document.getElementById('guideline-result-schedule');
+    if (resultGuideline) resultGuideline.textContent = `Your result appears immediately after submission. Published result time in this paper: ${this.formatScheduleDate(result)}.`;
   }
 
   setupScheduleTicker() {
@@ -289,9 +309,9 @@ class GateMockApp {
       if (state.mode === 'SCHEDULED') {
         if (currentView === 'lobby' && state.phase === 'EXAM_LIVE' && !this.examEngine) {
           this.startExam(state.remainingSeconds);
-        } else if (currentView === 'exam' && state.phase === 'WAITING_FOR_RESULTS') {
+        } else if (currentView === 'exam' && state.phase !== 'EXAM_LIVE') {
           this.autoSubmitScheduledExam();
-        } else if (currentView === 'waiting-results' && state.phase === 'RESULTS_DECLARED') {
+        } else if (currentView === 'waiting-results' && this.currentResult) {
           this.showResultsView();
         }
       }
@@ -337,6 +357,14 @@ class GateMockApp {
       target.style.display = viewName === 'exam' ? 'flex' : 'block';
     }
 
+    document.body.classList.toggle('exam-active', viewName === 'exam');
+    document.body.dataset.activeView = viewName;
+
+    if (viewName !== 'exam') {
+      this.closeQuestionPalette();
+      this.calculator.close();
+    }
+
     // Header buttons visibility
     const examActions = document.getElementById('header-exam-actions');
     if (examActions) {
@@ -361,11 +389,15 @@ class GateMockApp {
         if (!this.examEngine || !this.examEngine.isSubmitted) {
           this.startExam(state.remainingSeconds);
         } else {
-          this.switchView('waiting-results');
+          this.showResultsView();
         }
         break;
       case 'WAITING_FOR_RESULTS':
-        this.switchView('waiting-results');
+        if (this.currentResult) this.showResultsView();
+        else {
+          this.switchView('lobby');
+          this.renderLobby();
+        }
         break;
       case 'RESULTS_DECLARED':
         if (this.currentResult) {
@@ -393,7 +425,7 @@ class GateMockApp {
     }
     const timeEl = document.getElementById('lobby-duration');
     if (timeEl && this.currentPaper) {
-      timeEl.textContent = `${this.currentPaper.durationMinutes || 40} Mins`;
+      timeEl.textContent = `${this.currentPaper.questions.length * 2} Mins`;
     }
     const marksEl = document.getElementById('lobby-total-marks');
     if (marksEl && this.currentPaper) {
@@ -403,7 +435,7 @@ class GateMockApp {
     const startBtn = document.getElementById('btn-start-lobby-exam');
     if (startBtn) {
       if (this.scheduleManager.mode === 'PRACTICE') {
-        startBtn.textContent = 'Start 40-Minute Practice Test Now';
+        startBtn.textContent = `Start ${this.currentPaper.questions.length * 2}-Minute Practice Test Now`;
         startBtn.disabled = false;
         startBtn.style.opacity = '1';
       } else {
@@ -411,8 +443,12 @@ class GateMockApp {
           startBtn.textContent = 'Enter Live Exam Room';
           startBtn.disabled = false;
           startBtn.style.opacity = '1';
+        } else if (state.phase === 'PRE_EXAM_LOBBY') {
+          startBtn.textContent = `Exam Starts ${this.formatScheduleDate(state.examStartTime)} (Locked)`;
+          startBtn.disabled = true;
+          startBtn.style.opacity = '0.6';
         } else {
-          startBtn.textContent = 'Exam Starts at 9:00 PM (Locked)';
+          startBtn.textContent = 'Scheduled Exam Window Has Ended';
           startBtn.disabled = true;
           startBtn.style.opacity = '0.6';
         }
@@ -424,16 +460,33 @@ class GateMockApp {
     if (!this.currentPaper) return;
 
     this.examEngine = new ExamEngine(this.currentPaper);
+    this.examStartedAt = new Date().toISOString();
     this.switchView('exam');
+
+    const paperId = this.currentPaper.paperId || 'paper_01';
+    const draft = this.examStorage.getDraft(paperId, this.candidate);
+    let resumeDraft = false;
+    if (draft && Array.isArray(draft.questionStates) && draft.questionStates.length === this.currentPaper.questions.length) {
+      resumeDraft = window.confirm(`Resume your unfinished attempt from ${new Date(draft.savedAt).toLocaleString()}?\n\nChoose Cancel to start a fresh attempt.`);
+      if (resumeDraft) {
+        this.examEngine.questionStates = draft.questionStates;
+        this.examEngine.currentIndex = Math.min(Math.max(Number(draft.currentIndex) || 0, 0), this.currentPaper.questions.length - 1);
+        this.examStartedAt = draft.startedAt || this.examStartedAt;
+      } else {
+        this.examStorage.clearDraft(paperId, this.candidate);
+      }
+    }
 
     // Subscribe to engine events
     this.examEngine.onStateChange(() => {
       this.renderQuestion();
       this.renderPalette();
+      this.saveExamDraft();
     });
 
     this.examEngine.onTimerTick((remainingSecs) => {
       this.renderTimer(remainingSecs);
+      if (remainingSecs % 5 === 0) this.saveExamDraft();
     });
 
     this.examEngine.onTimeExpired(() => {
@@ -441,13 +494,31 @@ class GateMockApp {
       this.submitExam();
     });
 
-    const duration = secondsOverride !== null 
+    let duration = secondsOverride !== null
       ? secondsOverride 
-      : (this.currentPaper.durationMinutes || 40) * 60;
+      : this.currentPaper.questions.length * 2 * 60;
+
+    if (resumeDraft) {
+      duration = this.scheduleManager.mode === 'SCHEDULED'
+        ? Math.min(Number(draft.secondsRemaining) || duration, duration)
+        : Number(draft.secondsRemaining) || duration;
+    }
 
     this.examEngine.startTimer(duration);
     this.renderQuestion();
     this.renderPalette();
+  }
+
+  saveExamDraft() {
+    if (!this.examEngine || this.examEngine.isSubmitted || !this.currentPaper) return;
+    this.examStorage.saveDraft({
+      paperId: this.currentPaper.paperId || 'paper_01',
+      paperTitle: this.currentPaper.title,
+      candidate: this.candidate,
+      mode: this.scheduleManager.mode,
+      engine: this.examEngine,
+      startedAt: this.examStartedAt
+    });
   }
 
   renderTimer(seconds) {
@@ -492,7 +563,9 @@ class GateMockApp {
 
     if (q.type === 'MCQ' || q.type === 'MSQ') {
       (q.options || []).forEach(opt => {
-        const isSelected = qState.userAnswer === opt.id;
+        const isSelected = q.type === 'MSQ'
+          ? Array.isArray(qState.userAnswer) && qState.userAnswer.includes(opt.id)
+          : qState.userAnswer === opt.id;
         const optDiv = document.createElement('div');
         optDiv.className = `option-item ${isSelected ? 'selected' : ''}`;
         optDiv.innerHTML = `
@@ -540,8 +613,11 @@ class GateMockApp {
     this.examEngine.questionStates.forEach((st, idx) => {
       const btn = document.createElement('button');
       btn.className = `grid-btn status-${st.status.toLowerCase().replace(/_/g, '-')}`;
+      btn.type = 'button';
+      btn.setAttribute('aria-label', `Question ${idx + 1}: ${st.status.toLowerCase().replace(/_/g, ' ')}`);
       if (idx === this.examEngine.currentIndex) {
         btn.classList.add('current');
+        btn.setAttribute('aria-current', 'true');
       }
       btn.textContent = idx + 1;
       btn.addEventListener('click', () => {
@@ -562,21 +638,18 @@ class GateMockApp {
   }
 
   async submitExam() {
-    if (!this.examEngine) return;
+    if (!this.examEngine || this.examEngine.isSubmitted) return;
     this.currentResult = this.examEngine.evaluate();
 
-    // Record submission for candidate & friend leaderboard
-    await this.recordSubmission(this.currentResult);
-
-    const state = this.scheduleManager.getCurrentState();
-    if (this.scheduleManager.mode === 'SCHEDULED' && state.phase === 'WAITING_FOR_RESULTS') {
-      this.switchView('waiting-results');
-    } else {
-      this.showResultsView();
-    }
+    // Local persistence happens synchronously at the start of recordSubmission.
+    // Do not make the candidate wait for an optional server request to finish.
+    const recording = this.recordSubmission(this.currentResult);
+    this.showResultsView();
+    await recording;
   }
 
   async recordSubmission(res) {
+    const submittedAt = new Date().toISOString();
     const submission = {
       candidateName: this.candidate ? this.candidate.name : 'Candidate',
       rollNo: this.candidate ? this.candidate.rollNo : 'GATE-01',
@@ -587,8 +660,18 @@ class GateMockApp {
       correctCount: res.correctCount,
       incorrectCount: res.incorrectCount,
       unattemptedCount: res.unattemptedCount,
-      submittedAt: new Date().toISOString()
+      submittedAt
     };
+
+    this.currentAttempt = this.examStorage.saveAttempt({
+      result: res,
+      candidate: this.candidate,
+      paper: this.currentPaper,
+      mode: this.scheduleManager.mode,
+      startedAt: this.examStartedAt,
+      submittedAt
+    });
+    this.examStorage.clearDraft(submission.paperId, this.candidate);
 
     // 1. Post to backend server if running
     try {
@@ -685,10 +768,12 @@ class GateMockApp {
     }).join('');
   }
 
-  autoSubmitScheduledExam() {
+  async autoSubmitScheduledExam() {
     if (this.examEngine && !this.examEngine.isSubmitted) {
       this.currentResult = this.examEngine.evaluate();
-      this.switchView('waiting-results');
+      const recording = this.recordSubmission(this.currentResult);
+      this.showResultsView();
+      await recording;
     }
   }
 
@@ -714,12 +799,138 @@ class GateMockApp {
     const dateEl = document.getElementById('res-candidate-date');
     const titleEl = document.getElementById('res-paper-title');
 
-    if (nameEl && this.candidate) nameEl.textContent = this.candidate.name;
-    if (rollEl && this.candidate) rollEl.textContent = this.candidate.rollNo;
-    if (dateEl) dateEl.textContent = new Date().toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
-    if (titleEl && this.currentPaper) titleEl.textContent = this.currentPaper.title;
+    const resultCandidate = this.currentAttempt?.candidate || this.candidate;
+    if (nameEl && resultCandidate) nameEl.textContent = resultCandidate.name;
+    if (rollEl && resultCandidate) rollEl.textContent = resultCandidate.rollNo;
+    const resultDate = this.currentAttempt?.submittedAt || new Date().toISOString();
+    if (dateEl) dateEl.textContent = new Date(resultDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+    if (titleEl) titleEl.textContent = this.currentAttempt?.paperTitle || this.currentResult.paperTitle || this.currentPaper?.title || 'Mock Examination';
+
+    document.querySelectorAll('.filter-btn').forEach(button => {
+      const filter = button.dataset.filter;
+      const count = filter === 'ALL' ? res.totalQuestions
+        : filter === 'CORRECT' ? res.correctCount
+          : filter === 'INCORRECT' ? res.incorrectCount
+            : res.unattemptedCount;
+      const label = filter === 'ALL' ? 'All' : filter[0] + filter.slice(1).toLowerCase();
+      button.textContent = `${label} (${count})`;
+    });
 
     this.renderSolutionList();
+    this.renderResultInsights();
+  }
+
+  renderResultInsights() {
+    const container = document.getElementById('result-insights');
+    if (!container || !this.currentResult) return;
+    const breakdown = this.currentResult.breakdown || [];
+    const totalSeconds = breakdown.reduce((sum, item) => sum + Number(item.timeSpent || 0), 0);
+    const attempted = this.currentResult.correctCount + this.currentResult.incorrectCount;
+    const avgSeconds = attempted ? Math.round(totalSeconds / attempted) : 0;
+    const slowest = [...breakdown].sort((a, b) => Number(b.timeSpent || 0) - Number(a.timeSpent || 0))[0];
+    const analysis = this.examStorage.getAnalysis(this.candidate);
+    const change = analysis?.recentChange || 0;
+    const trendText = analysis && analysis.count > 1
+      ? `${change >= 0 ? '+' : ''}${change}% over recent attempts`
+      : 'Complete another attempt to see a trend';
+
+    container.innerHTML = `
+      <div class="insight-card">Average pace<strong>${avgSeconds ? `${avgSeconds}s / attempted question` : 'No attempted questions'}</strong></div>
+      <div class="insight-card">Most time spent<strong>${slowest ? `Question ${this.escapeHtml(slowest.id)} (${Number(slowest.timeSpent || 0)}s)` : 'Not available'}</strong></div>
+      <div class="insight-card">Score trend<strong>${trendText}</strong></div>
+    `;
+  }
+
+  escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, char => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    })[char]);
+  }
+
+  openProgressModal() {
+    const modal = document.getElementById('progress-modal');
+    if (!modal) return;
+    this.renderProgressDashboard();
+    modal.style.display = 'flex';
+  }
+
+  renderProgressDashboard() {
+    const summary = document.getElementById('progress-summary');
+    const list = document.getElementById('progress-attempts');
+    if (!summary || !list) return;
+    const attempts = this.examStorage.getAttempts(this.candidate);
+    const analysis = this.examStorage.getAnalysis(this.candidate);
+
+    if (!analysis) {
+      summary.innerHTML = '';
+      list.innerHTML = '<div style="padding:28px;text-align:center;color:#64748b;border:1px dashed #cbd5e1;border-radius:8px;">No saved attempts yet. Finish a practice test and your detailed result will appear here.</div>';
+      return;
+    }
+
+    summary.innerHTML = `
+      <div class="progress-summary-card"><strong>${analysis.count}</strong><span>Attempts</span></div>
+      <div class="progress-summary-card"><strong>${analysis.best.result.percentage}%</strong><span>Best score</span></div>
+      <div class="progress-summary-card"><strong>${analysis.averageAccuracy}%</strong><span>Avg accuracy</span></div>
+      <div class="progress-summary-card"><strong>${analysis.recentChange >= 0 ? '+' : ''}${analysis.recentChange}%</strong><span>Recent trend</span></div>
+    `;
+
+    list.innerHTML = attempts.map(attempt => `
+      <div class="progress-attempt-row">
+        <div>
+          <div class="progress-attempt-title">${this.escapeHtml(attempt.paperTitle)}</div>
+          <div class="progress-attempt-meta">${new Date(attempt.submittedAt).toLocaleString()} &bull; ${this.escapeHtml(attempt.mode || 'PRACTICE')}</div>
+        </div>
+        <div class="progress-metric"><strong>${attempt.result.totalScore} / ${attempt.result.maxPossibleMarks}</strong>Score</div>
+        <div class="progress-metric"><strong>${attempt.result.accuracyPercent}%</strong>Accuracy</div>
+        <div class="progress-metric"><strong>${attempt.result.correctCount}/${attempt.result.totalQuestions}</strong>Correct</div>
+        <div class="progress-row-actions">
+          <button class="mode-btn progress-review-btn" data-attempt-id="${this.escapeHtml(attempt.id)}">Review</button>
+          <button class="mode-btn danger-button progress-delete-btn" data-attempt-id="${this.escapeHtml(attempt.id)}" title="Delete this attempt">&times;</button>
+        </div>
+      </div>
+    `).join('');
+
+    list.querySelectorAll('.progress-review-btn').forEach(button => {
+      button.addEventListener('click', () => this.reviewSavedAttempt(button.dataset.attemptId));
+    });
+    list.querySelectorAll('.progress-delete-btn').forEach(button => {
+      button.addEventListener('click', () => {
+        if (!window.confirm('Delete this saved attempt? This cannot be undone unless you exported a backup.')) return;
+        this.examStorage.deleteAttempt(button.dataset.attemptId);
+        this.renderProgressDashboard();
+      });
+    });
+  }
+
+  reviewSavedAttempt(id) {
+    const attempt = this.examStorage.getAttempt(id);
+    if (!attempt) return alert('That saved attempt could not be found.');
+    this.currentAttempt = attempt;
+    this.currentResult = attempt.result;
+    this.latestSubmission = {
+      candidateName: attempt.candidate.name,
+      rollNo: attempt.candidate.rollNo,
+      paperId: attempt.paperId,
+      score: attempt.result.totalScore,
+      maxScore: attempt.result.maxPossibleMarks,
+      accuracyPercent: attempt.result.accuracyPercent,
+      correctCount: attempt.result.correctCount,
+      incorrectCount: attempt.result.incorrectCount,
+      unattemptedCount: attempt.result.unattemptedCount,
+      submittedAt: attempt.submittedAt
+    };
+    document.getElementById('progress-modal').style.display = 'none';
+    this.showResultsView();
+  }
+
+  downloadProgressBackup() {
+    const blob = new Blob([this.examStorage.exportBackup()], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `gate-exam-progress-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   renderSolutionList() {
@@ -785,6 +996,33 @@ class GateMockApp {
       });
     }
 
+    const floatingCalc = document.getElementById('btn-floating-calculator');
+    if (floatingCalc) {
+      floatingCalc.addEventListener('click', () => this.calculator.toggle());
+    }
+
+    const paletteToggle = document.getElementById('btn-palette-toggle');
+    const paletteClose = document.getElementById('btn-palette-close');
+    const paletteScrim = document.getElementById('palette-scrim');
+    if (paletteToggle) paletteToggle.addEventListener('click', () => this.toggleQuestionPalette());
+    if (paletteClose) paletteClose.addEventListener('click', () => this.closeQuestionPalette(true));
+    if (paletteScrim) paletteScrim.addEventListener('click', () => this.closeQuestionPalette(true));
+
+    const paletteGrid = document.getElementById('palette-grid');
+    if (paletteGrid) {
+      paletteGrid.addEventListener('click', (event) => {
+        if (event.target.closest('.grid-btn') && window.matchMedia('(max-width: 1060px)').matches) {
+          this.closeQuestionPalette();
+        }
+      });
+    }
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && document.getElementById('view-exam')?.classList.contains('palette-open')) {
+        this.closeQuestionPalette(true);
+      }
+    });
+
     // Top Bar Question Paper view
     const btnPaper = document.getElementById('btn-view-paper');
     if (btnPaper) {
@@ -816,6 +1054,51 @@ class GateMockApp {
     if (btnHeaderLead) {
       btnHeaderLead.addEventListener('click', () => this.openLeaderboardModal());
     }
+
+    const btnHeaderProgress = document.getElementById('btn-header-progress');
+    if (btnHeaderProgress) {
+      btnHeaderProgress.addEventListener('click', () => this.openProgressModal());
+    }
+
+    const btnExportProgress = document.getElementById('btn-export-progress');
+    if (btnExportProgress) {
+      btnExportProgress.addEventListener('click', () => this.downloadProgressBackup());
+    }
+
+    const btnImportProgress = document.getElementById('btn-import-progress');
+    const progressImportInput = document.getElementById('progress-import-input');
+    if (btnImportProgress && progressImportInput) {
+      btnImportProgress.addEventListener('click', () => progressImportInput.click());
+      progressImportInput.addEventListener('change', () => {
+        const file = progressImportInput.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            this.examStorage.importBackup(reader.result);
+            this.renderProgressDashboard();
+            alert('Progress backup imported successfully.');
+          } catch (error) {
+            alert(error.message || 'The backup could not be imported.');
+          } finally {
+            progressImportInput.value = '';
+          }
+        };
+        reader.readAsText(file);
+      });
+    }
+
+    const btnClearProgress = document.getElementById('btn-clear-progress');
+    if (btnClearProgress) {
+      btnClearProgress.addEventListener('click', () => {
+        if (!window.confirm('Clear every saved attempt and unfinished exam in this browser? Export a backup first if you may need it later.')) return;
+        this.examStorage.clearAll();
+        this.currentAttempt = null;
+        this.renderProgressDashboard();
+      });
+    }
+
+    window.addEventListener('pagehide', () => this.saveExamDraft());
 
     // Leaderboard button in results view
     const btnResLead = document.getElementById('btn-results-leaderboard');
@@ -894,6 +1177,12 @@ class GateMockApp {
       candProf.style.cursor = 'pointer';
       candProf.title = 'Click to change candidate name';
       candProf.addEventListener('click', openCandidateModal);
+      candProf.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openCandidateModal();
+        }
+      });
     }
 
     // Candidate box inside exam palette click
@@ -1029,16 +1318,8 @@ class GateMockApp {
         const val = e.target.value;
         if (val === 'real') {
           this.scheduleManager.resetRealTime();
-        } else if (val === 'pre_exam') {
-          this.scheduleManager.simulateTime(20, 58, 0); // 8:58 PM
-        } else if (val === 'exam_start') {
-          this.scheduleManager.simulateTime(21, 0, 0);  // 9:00 PM
-        } else if (val === 'exam_ending') {
-          this.scheduleManager.simulateTime(21, 39, 30); // 9:39:30 PM
-        } else if (val === 'waiting_results') {
-          this.scheduleManager.simulateTime(21, 45, 0); // 9:45 PM
-        } else if (val === 'results_out') {
-          this.scheduleManager.simulateTime(21, 50, 0); // 9:50 PM
+        } else {
+          this.scheduleManager.simulatePhase(val);
         }
         this.evaluateCurrentRoute();
       });
@@ -1116,6 +1397,29 @@ class GateMockApp {
     }
   }
 
+  toggleQuestionPalette() {
+    const examView = document.getElementById('view-exam');
+    if (!examView) return;
+    const shouldOpen = !examView.classList.contains('palette-open');
+    examView.classList.toggle('palette-open', shouldOpen);
+    const trigger = document.getElementById('btn-palette-toggle');
+    if (trigger) trigger.setAttribute('aria-expanded', String(shouldOpen));
+    if (shouldOpen) {
+      const closeButton = document.getElementById('btn-palette-close');
+      if (closeButton) closeButton.focus({ preventScroll: true });
+    }
+  }
+
+  closeQuestionPalette(returnFocus = false) {
+    const examView = document.getElementById('view-exam');
+    if (examView) examView.classList.remove('palette-open');
+    const trigger = document.getElementById('btn-palette-toggle');
+    if (trigger) {
+      trigger.setAttribute('aria-expanded', 'false');
+      if (returnFocus) trigger.focus({ preventScroll: true });
+    }
+  }
+
   handleUploadedJson(paper) {
     const validation = JsonValidator.validate(paper);
     const feedbackBox = document.getElementById('upload-validation-feedback');
@@ -1129,6 +1433,7 @@ class GateMockApp {
     feedbackBox.style.display = 'block';
 
     this.currentPaper = paper;
+    this.applyPaperSchedule(this.currentPaper);
     document.getElementById('paper-header-title').textContent = paper.title;
     setTimeout(() => {
       document.getElementById('upload-modal').style.display = 'none';
@@ -1144,7 +1449,13 @@ class GateMockApp {
       badge.textContent = 'Practice Mode (Anytime)';
       badge.className = 'mode-badge practice';
     } else {
-      badge.textContent = 'Scheduled Mode (Daily 9:00 PM - 9:40 PM)';
+      if (!this.currentPaper || !this.currentPaper.schedule) {
+        badge.textContent = 'Scheduled Mode';
+      } else {
+        const start = this.scheduleManager.getExamStartTime();
+        const end = this.scheduleManager.getExamEndTime();
+        badge.textContent = `Scheduled: ${this.formatScheduleDate(start)} – ${end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+      }
       badge.className = 'mode-badge scheduled';
     }
   }

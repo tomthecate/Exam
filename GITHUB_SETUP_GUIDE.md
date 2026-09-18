@@ -77,9 +77,9 @@ You do not need a server to change question papers. You have two easy ways:
 
 ## How You and Your Friend Compare Scores (Leaderboard)
 
-1. At 9:00 PM, both you and your friend open the GitHub link on your phones or laptops.
+1. At the exam date and start time configured in `data/today_paper.json`, both you and your friend open the GitHub link.
 2. Enter your names (e.g. "Urmila" and "Friend's Name").
-3. Take the 40-minute test.
+3. Take the test. The portal gives two minutes per question (20 questions = 40 minutes).
 4. After completing the exam, on the results screen:
    - Click **"🔗 Share Score Link"**.
    - A link is copied to your clipboard (e.g. `https://...?score=...`).

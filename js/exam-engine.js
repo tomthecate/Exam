@@ -5,7 +5,10 @@ class ExamEngine {
   constructor(paperData) {
     this.paper = paperData;
     this.currentIndex = 0;
-    this.durationSeconds = (paperData.durationMinutes || 40) * 60;
+    // Dynamic duration rule: 2 minutes per question
+    const questionCount = Array.isArray(paperData.questions) ? paperData.questions.length : 0;
+    this.durationMinutes = questionCount * 2;
+    this.durationSeconds = this.durationMinutes * 60;
     this.secondsRemaining = this.durationSeconds;
     this.timerInterval = null;
     this.isSubmitted = false;
@@ -67,7 +70,16 @@ class ExamEngine {
 
   selectOption(optId) {
     const qState = this.questionStates[this.currentIndex];
-    qState.userAnswer = optId;
+    const question = this.getCurrentQuestion();
+    if (question.type === 'MSQ') {
+      const selected = Array.isArray(qState.userAnswer) ? [...qState.userAnswer] : [];
+      const existingIndex = selected.indexOf(optId);
+      if (existingIndex >= 0) selected.splice(existingIndex, 1);
+      else selected.push(optId);
+      qState.userAnswer = selected;
+    } else {
+      qState.userAnswer = optId;
+    }
     this.emitStateChange();
   }
 
@@ -201,8 +213,8 @@ class ExamEngine {
           }
         } else if (q.type === 'MSQ') {
           // Multiple select
-          const userArr = Array.isArray(state.userAnswer) ? state.userAnswer.sort() : [state.userAnswer];
-          const correctArr = Array.isArray(q.correctAnswer) ? q.correctAnswer.sort() : [q.correctAnswer];
+          const userArr = Array.isArray(state.userAnswer) ? [...state.userAnswer].sort() : [state.userAnswer];
+          const correctArr = Array.isArray(q.correctAnswer) ? [...q.correctAnswer].sort() : [q.correctAnswer];
           if (JSON.stringify(userArr) === JSON.stringify(correctArr)) {
             isCorrect = true;
             marksEarned = posMarks;

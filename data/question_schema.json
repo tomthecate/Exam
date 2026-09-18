@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "GateMockExamPaper",
   "type": "object",
-  "required": ["paperId", "title", "durationMinutes", "totalQuestions", "questions"],
+  "required": ["paperId", "title", "questions", "schedule"],
   "properties": {
     "paperId": {
       "type": "string",
@@ -16,38 +16,33 @@
       "type": "string",
       "description": "Subject or branch name, e.g. General Aptitude / Computer Science"
     },
-    "durationMinutes": {
-      "type": "integer",
-      "default": 40,
-      "description": "Total exam duration in minutes (e.g. 40)"
-    },
     "totalQuestions": {
       "type": "integer",
-      "default": 20,
-      "description": "Number of questions in the paper"
+      "description": "Optional informational value; runtime always uses questions.length"
     },
     "totalMarks": {
       "type": "number",
-      "default": 40,
-      "description": "Total marks for the paper"
+      "description": "Total marks for the paper (defaults to totalQuestions * 2)"
     },
     "schedule": {
       "type": "object",
+      "required": ["examDate", "startTime", "resultDate", "resultTime"],
       "properties": {
-        "dailyStart": {
+        "examDate": {
           "type": "string",
-          "default": "21:00",
-          "description": "Daily exam start time in 24-hour HH:MM format (9:00 PM)"
+          "description": "Exam date in YYYY-MM-DD format (e.g. 2026-09-18)"
         },
-        "dailyEnd": {
+        "startTime": {
           "type": "string",
-          "default": "21:40",
-          "description": "Daily exam end time in 24-hour HH:MM format (9:40 PM)"
+          "description": "Exam start time in 24-hour HH:MM format (e.g. 21:00)"
+        },
+        "resultDate": {
+          "type": "string",
+          "description": "Date when results are declared in YYYY-MM-DD format (e.g. 2026-09-18)"
         },
         "resultTime": {
           "type": "string",
-          "default": "21:50",
-          "description": "Daily result publication time in 24-hour HH:MM format (9:50 PM)"
+          "description": "Time when results are declared in 24-hour HH:MM format (e.g. 21:50)"
         }
       }
     },
@@ -64,7 +59,7 @@
         "type": "object",
         "required": ["id", "type", "question", "options", "correctAnswer"],
         "properties": {
-          "id": { "type": "integer", "description": "Question sequence number (1 to 20)" },
+          "id": { "type": "integer", "description": "Question sequence number" },
           "type": {
             "type": "string",
             "enum": ["MCQ", "MSQ", "NAT"],

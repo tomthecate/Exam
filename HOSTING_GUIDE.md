@@ -1,6 +1,6 @@
 # How to Host and Share This Mock Exam Portal with Your Friends
 
-This guide explains how you can post and share this website so your friends can take the daily 40-minute mock exam with you, compare scores on the shared leaderboard, and how you can manage questions via the Admin Portal.
+This guide explains how you can post and share this website so your friends can take scheduled mock exams with you, compare scores on the shared leaderboard, and manage questions through the Admin Portal. Exam duration is always calculated at two minutes per question.
 
 ---
 
@@ -111,8 +111,9 @@ Only you have access to the **Admin Portal** to upload new questions and monitor
 - Click **"Export to CSV"** to download an Excel-compatible spreadsheet of the results.
 
 ### 4. Schedule Settings
-- Customize the exam timings:
-  - Daily Start: `21:00` (9:00 PM)
-  - Daily End / Auto-Submit: `21:40` (9:40 PM)
-  - Result & Solution Release: `21:50` (9:50 PM)
-  - Test Duration: `40` minutes
+- Set the schedule inside each question-paper JSON:
+  - `examDate`: exam date in `YYYY-MM-DD` format
+  - `startTime`: exam start in 24-hour `HH:MM` format
+  - `resultDate` and `resultTime`: published-result availability
+- Do not add an end time or duration. The portal calculates the end as `questions.length × 2 minutes`.
+- Each candidate sees their own result immediately after submission or timeout.

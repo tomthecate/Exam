@@ -23,10 +23,6 @@ if (!fs.existsSync(SUBMISSIONS_DIR)) fs.mkdirSync(SUBMISSIONS_DIR, { recursive: 
 // Ensure default settings exist
 if (!fs.existsSync(SETTINGS_FILE)) {
   const defaultSettings = {
-    dailyStart: '21:00',
-    dailyEnd: '21:40',
-    resultTime: '21:50',
-    durationMinutes: 40,
     activePaperFile: 'csir_net_gate_general_aptitude_01.json'
   };
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaultSettings, null, 2), 'utf8');
@@ -57,10 +53,6 @@ function getSettings() {
     return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
   } catch (e) {
     return {
-      dailyStart: '21:00',
-      dailyEnd: '21:40',
-      resultTime: '21:50',
-      durationMinutes: 40,
       activePaperFile: 'csir_net_gate_general_aptitude_01.json'
     };
   }
@@ -138,13 +130,15 @@ const server = http.createServer(async (req, res) => {
     if (fs.existsSync(activeFile)) {
       try {
         const paper = JSON.parse(fs.readFileSync(activeFile, 'utf8'));
-        // Merge schedule settings
-        paper.schedule = {
-          dailyStart: settings.dailyStart || '21:00',
-          dailyEnd: settings.dailyEnd || '21:40',
-          resultTime: settings.resultTime || '21:50'
-        };
-        paper.durationMinutes = settings.durationMinutes || paper.durationMinutes || 40;
+        // Dynamic duration rule: 2 minutes per question
+        const qCount = Array.isArray(paper.questions) ? paper.questions.length : 0;
+        paper.totalQuestions = qCount;
+        if (!paper.totalMarks) paper.totalMarks = qCount * 2;
+
+        const ps = paper.schedule || {};
+        if (!ps.examDate || !ps.startTime || !ps.resultDate || !ps.resultTime) {
+          return sendJson(res, 422, { error: 'Paper JSON must include schedule.examDate, startTime, resultDate, and resultTime.' });
+        }
         return sendJson(res, 200, paper);
       } catch (err) {
         return sendJson(res, 500, { error: 'Failed to read active paper file.' });
@@ -153,6 +147,8 @@ const server = http.createServer(async (req, res) => {
       // Fallback to sample paper if active file not in papers dir
       if (fs.existsSync(defaultSamplePaper)) {
         const fallback = JSON.parse(fs.readFileSync(defaultSamplePaper, 'utf8'));
+        const qCount = Array.isArray(fallback.questions) ? fallback.questions.length : 0;
+        fallback.totalQuestions = qCount;
         return sendJson(res, 200, fallback);
       }
       return sendJson(res, 404, { error: 'No active question paper found.' });
@@ -184,13 +180,15 @@ const server = http.createServer(async (req, res) => {
       try {
         const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
         const stats = fs.statSync(filePath);
+        const qCount = data.questions ? data.questions.length : (data.totalQuestions || 0);
         return {
           filename: file,
           paperId: data.paperId || file.replace('.json', ''),
           title: data.title || file,
-          totalQuestions: data.questions ? data.questions.length : 0,
-          totalMarks: data.totalMarks || 40,
-          durationMinutes: data.durationMinutes || 40,
+          totalQuestions: qCount,
+          totalMarks: data.totalMarks || (qCount * 2),
+          durationMinutes: qCount * 2,
+          schedule: data.schedule || null,
           uploadedAt: stats.mtime,
           isActive: file === settings.activePaperFile
         };
@@ -215,6 +213,14 @@ const server = http.createServer(async (req, res) => {
       if (!paperData || !paperData.questions || !Array.isArray(paperData.questions)) {
         return sendJson(res, 400, { error: 'Invalid paper data format. Missing questions array.' });
       }
+      const schedule = paperData.schedule || {};
+      if (!schedule.examDate || !schedule.startTime || !schedule.resultDate || !schedule.resultTime) {
+        return sendJson(res, 400, { error: 'Paper JSON schedule must include examDate, startTime, resultDate, and resultTime.' });
+      }
+      delete paperData.durationMinutes;
+      delete schedule.endTime;
+      delete schedule.dailyStart;
+      delete schedule.dailyEnd;
 
       // Generate filename based on date or title
       const sanitizedTitle = (paperData.title || 'paper').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
@@ -267,14 +273,21 @@ const server = http.createServer(async (req, res) => {
 
     try {
       const body = await parseJsonBody(req);
+      if (!body.examDate || !body.startTime || !body.resultDate || !body.resultTime) {
+        return sendJson(res, 400, { error: 'All four JSON schedule fields are required.' });
+      }
       const settings = getSettings();
-      if (body.dailyStart) settings.dailyStart = body.dailyStart;
-      if (body.dailyEnd) settings.dailyEnd = body.dailyEnd;
-      if (body.resultTime) settings.resultTime = body.resultTime;
-      if (body.durationMinutes) settings.durationMinutes = parseInt(body.durationMinutes, 10);
-
-      saveSettings(settings);
-      return sendJson(res, 200, { success: true, settings });
+      const activeFile = path.join(PAPERS_DIR, settings.activePaperFile || 'csir_net_gate_general_aptitude_01.json');
+      if (!fs.existsSync(activeFile)) return sendJson(res, 404, { error: 'Active paper not found.' });
+      const paper = JSON.parse(fs.readFileSync(activeFile, 'utf8'));
+      paper.schedule = {
+        examDate: body.examDate,
+        startTime: body.startTime,
+        resultDate: body.resultDate,
+        resultTime: body.resultTime
+      };
+      fs.writeFileSync(activeFile, JSON.stringify(paper, null, 2), 'utf8');
+      return sendJson(res, 200, { success: true, schedule: paper.schedule });
     } catch (err) {
       return sendJson(res, 400, { error: 'Invalid settings update.' });
     }

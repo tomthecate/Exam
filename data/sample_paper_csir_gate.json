@@ -2,13 +2,13 @@
   "paperId": "csir_net_gate_general_aptitude_01",
   "title": "CSIR NET / GATE General Aptitude Mock Paper",
   "subject": "General Aptitude (Part A / Paper 1)",
-  "durationMinutes": 40,
   "totalQuestions": 20,
   "totalMarks": 40,
   "schedule": {
-    "dailyStart": "21:00",
-    "dailyEnd": "21:40",
-    "resultTime": "21:50"
+    "examDate": "2026-09-18",
+    "startTime": "21:00",
+    "resultDate": "2026-09-18",
+    "resultTime": "21:40"
   },
   "markingScheme": {
     "positiveMarks": 2,

@@ -197,6 +197,18 @@ class AdminPortal {
     if (repoEl) repoEl.value = this.githubSync.repo;
     if (tokenEl) tokenEl.value = this.githubSync.token;
     if (branchEl) branchEl.value = this.githubSync.branch;
+
+    const schedule = window.app?.currentPaper?.schedule;
+    if (schedule) {
+      const examDateEl = document.getElementById('settings-exam-date');
+      const startTimeEl = document.getElementById('settings-start-time');
+      const resultDateEl = document.getElementById('settings-result-date');
+      const resultTimeEl = document.getElementById('settings-result-time');
+      if (examDateEl) examDateEl.value = schedule.examDate || '';
+      if (startTimeEl) startTimeEl.value = schedule.startTime || '';
+      if (resultDateEl) resultDateEl.value = schedule.resultDate || '';
+      if (resultTimeEl) resultTimeEl.value = schedule.resultTime || '';
+    }
   }
 
   downloadTodayPaper() {
@@ -337,6 +349,7 @@ class AdminPortal {
         alert(data.message || 'Paper uploaded successfully!');
         if (makeActive && window.app) {
           window.app.currentPaper = this.stagedPaper;
+          window.app.applyPaperSchedule(window.app.currentPaper);
           window.app.evaluateCurrentRoute();
         }
         this.switchTab('library');
@@ -349,6 +362,7 @@ class AdminPortal {
       localStorage.setItem(`gate_paper_${dateInput}`, JSON.stringify(this.stagedPaper));
       if (makeActive && window.app) {
         window.app.currentPaper = this.stagedPaper;
+        window.app.applyPaperSchedule(window.app.currentPaper);
         window.app.evaluateCurrentRoute();
       }
       alert('Paper saved to local browser storage!');
@@ -393,8 +407,8 @@ class AdminPortal {
           <div style="font-weight:700;">${p.title}</div>
           <div style="font-size:11px;color:#64748b;">${p.filename}</div>
         </td>
-        <td>${p.totalQuestions} Qs (${p.totalMarks || 40} Marks)</td>
-        <td>${p.durationMinutes || 40} Mins</td>
+        <td>${p.totalQuestions} Qs (${p.totalMarks || (p.totalQuestions * 2)} Marks)</td>
+        <td>${p.totalQuestions * 2} Mins</td>
         <td>
           ${p.isActive ? '<span class="badge-active">ACTIVE TODAY</span>' : '<span class="badge-inactive">Inactive</span>'}
         </td>
@@ -406,13 +420,14 @@ class AdminPortal {
   }
 
   renderLocalPapers() {
+    const current = window.app?.currentPaper;
+    const questionCount = current?.questions?.length || 0;
     const papers = [
       {
-        filename: 'csir_net_gate_general_aptitude_01.json',
-        title: 'CSIR NET / GATE General Aptitude Mock Paper (20 Qs)',
-        totalQuestions: 20,
-        totalMarks: 40,
-        durationMinutes: 40,
+        filename: 'today_paper.json',
+        title: current?.title || 'Current Local Question Paper',
+        totalQuestions: questionCount,
+        totalMarks: current?.totalMarks || (questionCount * 2),
         isActive: true
       }
     ];
@@ -521,10 +536,20 @@ class AdminPortal {
   }
 
   async saveScheduleSettings() {
-    const dailyStart = document.getElementById('settings-start-time').value;
-    const dailyEnd = document.getElementById('settings-end-time').value;
+    const examDate = document.getElementById('settings-exam-date').value;
+    const startTime = document.getElementById('settings-start-time').value;
+    const resultDate = document.getElementById('settings-result-date').value;
     const resultTime = document.getElementById('settings-result-time').value;
-    const durationMinutes = parseInt(document.getElementById('settings-duration').value, 10);
+    if (!examDate || !startTime || !resultDate || !resultTime) {
+      return alert('Exam date, start time, result date, and result time are all required.');
+    }
+
+    const schedule = { examDate, startTime, resultDate, resultTime };
+    if (window.app?.currentPaper) {
+      const candidatePaper = { ...window.app.currentPaper, schedule };
+      const validation = JsonValidator.validate(candidatePaper);
+      if (!validation.valid) return alert(validation.errors.join('\n'));
+    }
 
     try {
       const resp = await fetch('/api/admin/settings', {
@@ -533,28 +558,26 @@ class AdminPortal {
           'Content-Type': 'application/json',
           'X-Admin-Passcode': this.passcode
         },
-        body: JSON.stringify({ dailyStart, dailyEnd, resultTime, durationMinutes })
+        body: JSON.stringify(schedule)
       });
 
       if (resp.ok) {
         alert('Schedule settings saved successfully!');
-        if (window.app && window.app.scheduleManager) {
-          const [sh, sm] = dailyStart.split(':').map(Number);
-          const [eh, em] = dailyEnd.split(':').map(Number);
-          const [rh, rm] = resultTime.split(':').map(Number);
-          window.app.scheduleManager.startHour = sh;
-          window.app.scheduleManager.startMinute = sm;
-          window.app.scheduleManager.endHour = eh;
-          window.app.scheduleManager.endMinute = em;
-          window.app.scheduleManager.resultHour = rh;
-          window.app.scheduleManager.resultMinute = rm;
+        if (window.app?.currentPaper) {
+          window.app.currentPaper.schedule = schedule;
+          window.app.applyPaperSchedule(window.app.currentPaper);
           window.app.evaluateCurrentRoute();
         }
       } else {
         alert('Failed to save settings.');
       }
     } catch (e) {
-      alert('Saved settings locally in browser.');
+      if (window.app?.currentPaper) {
+        window.app.currentPaper.schedule = schedule;
+        window.app.applyPaperSchedule(window.app.currentPaper);
+        window.app.evaluateCurrentRoute();
+      }
+      alert('Schedule applied locally. Download today_paper.json to publish it on GitHub Pages.');
     }
   }
 }
