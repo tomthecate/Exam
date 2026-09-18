@@ -7,10 +7,10 @@
   "totalMarks": 40,
   "schedule": {
     "examDate": "2026-09-19",
-    "startTime": "14:30",
-    "endTime": "15:10",
+    "startTime": "16:30",
+    "endTime": "17:10",
     "resultDate": "2026-09-19",
-    "resultTime": "15:10"
+    "resultTime": "17:10"
   },
   "markingScheme": {
     "positiveMarks": 2,
