@@ -31,10 +31,9 @@ A modern, high-fidelity Computer-Based Test (CBT) mock examination web applicati
   - Fractions, square roots, Greek letters ($\sigma, \alpha, \beta, \theta$), superscripts, subscripts, matrices, and units.
   - Inline SVG diagram support for geometric figures, graphs, and Venn diagrams.
 
-- **Question Paper Upload & Management**:
-  - Upload any custom `.json` question paper.
-  - Built-in schema validator with real-time syntax checking and LaTeX preview.
-  - One-click template download.
+- **Past Exam Practice Sets**:
+  - Students can choose from the available papers in `data/papers/index.json` before starting Practice Mode.
+  - Each listed `.json` paper uses the same validation-friendly question format and LaTeX support.
 
 - **Private Browser-Based Progress Tracking (GitHub Pages compatible)**:
   - Keeps up to 30 complete attempts per candidate in the browser, including answers, marks, timing, and detailed solutions.
@@ -144,7 +143,7 @@ You can upload your own question papers using the **"Upload JSON"** button in th
 
 ## Included Sample Question Paper
 
-The platform comes pre-loaded with the **CSIR NET / GATE General Aptitude Paper** containing all **20 questions**, diagrams, options, and step-by-step solutions extracted directly from your uploaded PDF:
+The platform comes pre-loaded with selectable CSIR NET / GATE General Aptitude practice sets containing questions, diagrams, options, and step-by-step solutions:
 - **Questions 1 to 20** covering ratios, relative speed, probability, standard deviation, logical window puzzle, geometric perimeter, 3D sphere stacking, GDP data interpretation, Venn diagrams, sibling probabilities, and self-referential reasoning.
 - Inline SVGs included for all diagram questions (Q8, Q10, Q12, Q13).
 - Step-by-step LaTeX solutions for all 20 questions.

@@ -1,6 +1,6 @@
 # How to Host and Share This Mock Exam Portal with Your Friends
 
-This guide explains how you can post and share this website so your friends can take scheduled mock exams with you, compare scores on the shared leaderboard, and manage questions through the Admin Portal. Exam duration is always calculated at two minutes per question.
+This guide explains how you can post and share this website so your friends can take scheduled mock exams, choose past sets in Practice Mode, and compare scores on the shared leaderboard. Exam duration is always calculated at two minutes per question.
 
 ---
 
@@ -24,7 +24,6 @@ The included server (`server.js`) requires **zero npm packages** and runs on any
    ====================================================
      Local URL:        http://localhost:3000
      Friend Wi-Fi URL: http://192.168.1.15:3000
-     Admin Passcode:   admin123
    ====================================================
    ```
 
@@ -67,7 +66,7 @@ To keep the website online 24/7 even when your laptop is turned off:
 cd "/Users/urmiladebnath/Desktop/Exam prepration"
 git init
 git add .
-git commit -m "GATE Mock CBT portal with admin and leaderboard"
+git commit -m "GATE Mock CBT portal with practice sets and leaderboard"
 # Push to your GitHub account (public or private repo)
 ```
 
@@ -79,41 +78,14 @@ git commit -m "GATE Mock CBT portal with admin and leaderboard"
    - **Environment**: Node
    - **Build Command**: *(leave empty)*
    - **Start Command**: `node server.js`
-   - **Environment Variables** (Optional): `ADMIN_PASSCODE=your_secret_passcode`
 5. Click **Deploy Web Service**.
 6. Render will generate your permanent link (e.g., `https://gate-mock-exam.onrender.com`).
 7. Share that link with your friend!
 
 ---
 
-## How the Admin Portal Works
+## Managing question papers
 
-Only you have access to the **Admin Portal** to upload new questions and monitor scores:
-
-1. Click the **"⚙️ Admin Portal"** button in the top header.
-2. Enter the admin passcode: **`admin123`** (you can change this anytime in `server.js`).
-3. You will have access to 4 tabs:
-
-### 1. Upload Paper for Today
-- Choose a `.json` question paper from your computer or paste raw JSON.
-- Set the scheduled date (defaults to today).
-- Check **"Set as Active Question Paper for Today"**.
-- The system automatically validates question count, options, answer keys, and renders a live KaTeX math preview.
-- Click **"Save & Activate Paper for Exam"**. The new paper instantly becomes live for both you and your friend!
-
-### 2. Papers Library
-- View all uploaded question papers.
-- Switch between different test papers with one click.
-
-### 3. Student Submissions & Live Scoreboard
-- See all friends who took the exam.
-- Shows their Rank, Candidate Name, Score (/40), Accuracy %, Correct/Incorrect counts, and submission time.
-- Click **"Export to CSV"** to download an Excel-compatible spreadsheet of the results.
-
-### 4. Schedule Settings
-- Set the schedule inside each question-paper JSON:
-  - `examDate`: exam date in `YYYY-MM-DD` format
-  - `startTime`: exam start in 24-hour `HH:MM` format
-  - `resultDate` and `resultTime`: published-result availability
-- Do not add an end time or duration. The portal calculates the end as `questions.length × 2 minutes`.
-- Each candidate sees their own result immediately after submission or timeout.
+- Edit `data/today_paper.json` to change the scheduled exam.
+- Add past papers to `data/papers/`, then list their filenames in `data/papers/index.json` so students can select them in Practice Mode.
+- Keep each paper's schedule in its JSON. The portal calculates the end time as `questions.length × 2 minutes`.

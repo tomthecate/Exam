@@ -6,7 +6,7 @@
   <title>GATE CBT Mock Examination Portal</title>
   <!-- KaTeX CSS for LaTeX Mathematical Scientific Notation -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-  <link rel="stylesheet" href="css/gate-theme.css">
+  <link rel="stylesheet" href="css/gate-theme.css?v=20260918-3">
 </head>
 <body>
 
@@ -51,10 +51,6 @@
           <span>&#128200; My Progress</span>
         </button>
 
-        <button class="btn-header" id="btn-header-admin" style="background:#7c3aed;border-color:#7c3aed;" title="Open Admin Portal to manage question papers">
-          <span>&#9881; Admin Portal</span>
-        </button>
-
         <div class="candidate-profile" title="Click to change candidate name" role="button" tabindex="0" aria-label="Edit candidate profile">
           <div class="candidate-avatar">C</div>
           <div class="candidate-meta">
@@ -96,7 +92,13 @@
         <h1 class="lobby-title" id="lobby-paper-title">CSIR NET / GATE General Aptitude Mock Paper</h1>
         <p class="lobby-subtitle">Online Computer Based Test (CBT) Examination Portal</p>
 
-        <div class="schedule-countdown-box">
+        <div id="practice-paper-picker" class="practice-paper-picker" hidden>
+          <label for="select-practice-paper">Choose a past exam set</label>
+          <select id="select-practice-paper" aria-describedby="practice-paper-help"></select>
+          <p id="practice-paper-help">Select any available paper before starting your practice test.</p>
+        </div>
+
+        <div class="schedule-countdown-box" id="lobby-schedule-countdown">
           <div class="countdown-unit">
             <span class="countdown-digits" id="lobby-countdown">--:--</span>
             <span class="countdown-label" id="lobby-countdown-label">Next Exam Countdown</span>
@@ -488,233 +490,16 @@
     </div>
   </div>
 
-  <!-- MODAL: ADMIN LOGIN PASSCODE -->
-  <div id="admin-login-modal" class="modal-backdrop" style="display:none;">
-    <div class="modal-content" style="max-width:420px;">
-      <div class="modal-header" style="background:#7c3aed;">
-        <span class="modal-title">&#128274; Admin Access</span>
-        <button class="modal-close">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p style="font-size:13px; color:#475569; margin-bottom:14px;">Enter the administrator passcode to access paper management and student records.</p>
-        <div class="form-group">
-          <label class="form-label">Admin Passcode:</label>
-          <input type="password" id="input-admin-passcode" class="form-control" placeholder="Default: admin123">
-        </div>
-        <div style="font-size:11px; color:#64748b;">Default passcode: <code>admin123</code></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary-action modal-cancel-btn">Cancel</button>
-        <button class="btn-primary-action" id="btn-admin-login-submit" style="background:#7c3aed;">Login &rarr;</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL: ADMIN DASHBOARD -->
-  <div id="admin-dashboard-modal" class="modal-backdrop" style="display:none;">
-    <div class="modal-content" style="max-width:850px; max-height:92vh;">
-      <div class="modal-header" style="background:#1e3a8a;">
-        <span class="modal-title">&#9881; GATE Mock Exam - Administration Portal</span>
-        <div style="display:flex; align-items:center; gap:10px;">
-          <button id="btn-admin-logout" style="background:rgba(255,255,255,0.2); border:none; color:#fff; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">Logout</button>
-          <button class="modal-close">&times;</button>
-        </div>
-      </div>
-
-      <!-- Admin Tab Navigation -->
-      <div class="admin-tab-nav">
-        <button class="admin-tab-btn active" data-tab="upload">&#128229; Upload Paper for Today</button>
-        <button class="admin-tab-btn" data-tab="library">&#128218; Papers Library</button>
-        <button class="admin-tab-btn" data-tab="submissions">&#127942; Submissions &amp; Scoreboard</button>
-        <button class="admin-tab-btn" data-tab="settings">&#9200; Schedule Settings</button>
-      </div>
-
-      <!-- Tab 1: Upload Paper -->
-      <div id="admin-tab-upload" class="admin-body">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-          <h3 style="font-size:16px; font-weight:700; color:#1e293b;">Upload New Question Paper for Daily Exam</h3>
-          <button class="mode-btn" id="btn-download-template" style="color:#0284c7; border-color:#0284c7;">&#11015; Download JSON Template</button>
-        </div>
-
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px;">
-          <div class="form-group">
-            <label class="form-label">Exam Scheduled Date:</label>
-            <input type="date" id="admin-paper-date" class="form-control">
-          </div>
-          <div class="form-group" style="display:flex; align-items:center; padding-top:22px;">
-            <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; cursor:pointer;">
-              <input type="checkbox" id="admin-set-active-check" checked>
-              <span>Set as Active Question Paper for Today</span>
-            </label>
-          </div>
-        </div>
-
-        <div style="border:2px dashed #cbd5e1; border-radius:8px; padding:20px; text-align:center; background:#f8fafc; margin-bottom:16px;">
-          <input type="file" id="admin-file-input" accept=".json" style="display:none;">
-          <label for="admin-file-input" class="btn-primary-action" style="display:inline-flex; cursor:pointer; margin-bottom:6px;">
-            &#128194; Choose .json Question Paper File
-          </label>
-          <div style="font-size:12px; color:#64748b;">Upload JSON file created according to the GATE paper schema</div>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Or Paste Raw JSON Below:</label>
-          <textarea id="admin-json-textarea" rows="5" class="form-control" style="font-family:monospace; font-size:12px;" placeholder="Paste { &quot;paperId&quot;: ..., &quot;questions&quot;: [...] }"></textarea>
-          <div style="text-align:right; margin-top:6px;">
-            <button class="mode-btn" id="btn-admin-parse-json">Verify &amp; Preview Pasted JSON</button>
-          </div>
-        </div>
-
-        <div id="admin-upload-feedback" class="admin-feedback" style="display:none;"></div>
-        <div id="admin-preview-box" style="display:none; margin-top:12px; max-height:180px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:6px; padding:10px; background:#f8fafc;"></div>
-
-        <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-          <div style="display:flex; gap:8px;">
-            <button id="btn-admin-download-today" class="mode-btn" style="color:#0284c7; border-color:#0284c7;">
-              &#128229; Download today_paper.json
-            </button>
-            <button id="btn-admin-push-github" class="mode-btn" style="background:#0f172a; color:#fff; border-color:#0f172a;">
-              &#9729; Push Directly to GitHub Repository
-            </button>
-          </div>
-          <button id="btn-admin-confirm-upload" class="btn-primary-action" disabled style="background:#16a34a;">
-            &#10004; Save &amp; Activate Locally
-          </button>
-        </div>
-
-        <!-- Raw URL import -->
-        <div style="margin-top:20px; padding-top:16px; border-top:1px solid #e2e8f0;">
-          <div class="form-label">Or Load Paper from GitHub Raw URL / Gist:</div>
-          <div style="display:flex; gap:8px;">
-            <input type="url" id="admin-raw-url-input" class="form-control" placeholder="https://raw.githubusercontent.com/user/repo/main/data/today_paper.json">
-            <button id="btn-admin-load-raw" class="mode-btn" style="white-space:nowrap;">Load from URL</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Tab 2: Papers Library -->
-      <div id="admin-tab-library" class="admin-body" style="display:none;">
-        <h3 style="font-size:16px; font-weight:700; color:#1e293b; margin-bottom:12px;">Stored Question Papers</h3>
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>Paper Title / File</th>
-              <th>Questions</th>
-              <th>Duration</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="admin-papers-table-body">
-            <!-- Populated dynamically -->
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Tab 3: Submissions & Scoreboard -->
-      <div id="admin-tab-submissions" class="admin-body" style="display:none;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-          <h3 style="font-size:16px; font-weight:700; color:#1e293b;">Candidate Exam Attempts &amp; Scores</h3>
-          <div style="display:flex; gap:8px;">
-            <button class="mode-btn" id="btn-refresh-submissions">&#8635; Refresh</button>
-            <button class="mode-btn" id="btn-export-csv" style="color:#15803d; border-color:#15803d;">&#128190; Export to CSV</button>
-          </div>
-        </div>
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>Rank</th>
-              <th>Candidate</th>
-              <th>Score</th>
-              <th>Accuracy</th>
-              <th>Breakdown</th>
-              <th>Time</th>
-            </tr>
-          </thead>
-          <tbody id="admin-subs-table-body">
-            <!-- Populated dynamically -->
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Tab 4: Schedule & GitHub Settings -->
-      <div id="admin-tab-settings" class="admin-body" style="display:none;">
-        <h3 style="font-size:16px; font-weight:700; color:#1e293b; margin-bottom:14px;">Exam Timetable Configuration</h3>
-        <div style="max-width:540px;">
-          <div class="form-group">
-            <label class="form-label">Exam Date:</label>
-            <input type="date" id="settings-exam-date" class="form-control">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Exam Start Time:</label>
-            <input type="time" id="settings-start-time" class="form-control">
-            <div style="font-size:11px; color:#64748b;">End time is calculated automatically: 2 minutes × question count.</div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Published Result Date:</label>
-            <input type="date" id="settings-result-date" class="form-control">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Published Result Time:</label>
-            <input type="time" id="settings-result-time" class="form-control">
-            <div style="font-size:11px; color:#64748b;">Candidates still see their own result immediately upon submission or timeout.</div>
-          </div>
-
-          <button id="btn-save-schedule-settings" class="btn-primary-action" style="margin-top:10px; margin-bottom:24px;">
-            Save Schedule Settings
-          </button>
-
-          <!-- GitHub Integration Settings -->
-          <div style="padding-top:16px; border-top:2px solid #e2e8f0;">
-            <h4 style="font-size:15px; font-weight:700; color:#1e293b; margin-bottom:6px;">GitHub Repository Integration (Optional)</h4>
-            <p style="font-size:12px; color:#64748b; margin-bottom:12px;">Allows 1-click publishing of today's question paper directly to your GitHub Pages repository from your browser.</p>
-
-            <div class="form-group">
-              <label class="form-label">GitHub Username / Owner:</label>
-              <input type="text" id="admin-gh-owner" class="form-control" placeholder="e.g. urmiladebnath">
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">GitHub Repository Name:</label>
-              <input type="text" id="admin-gh-repo" class="form-control" placeholder="e.g. exam-preparation">
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Branch Name:</label>
-              <input type="text" id="admin-gh-branch" class="form-control" value="main">
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">GitHub Personal Access Token (PAT):</label>
-              <input type="password" id="admin-gh-token" class="form-control" placeholder="ghp_xxxxxxxxxxxx">
-              <div style="font-size:11px; color:#64748b; margin-top:3px;">Token is stored safely only in your own browser's local storage with 'repo' scope.</div>
-            </div>
-
-            <button id="btn-save-github-config" class="btn-primary-action" style="background:#0f172a;">
-              Save GitHub Settings
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="modal-footer">
-        <button class="btn-secondary-action modal-cancel-btn">Close Admin Portal</button>
-      </div>
-    </div>
-  </div>
 
   <!-- MODAL: LEADERBOARD -->
   <div id="leaderboard-modal" class="modal-backdrop" style="display:none;">
     <div class="modal-content" style="max-width:650px;">
       <div class="modal-header" style="background:#0f766e;">
-        <span class="modal-title">&#127942; Daily Exam Leaderboard &amp; Rankings</span>
+        <span class="modal-title">&#127942; Exam Participants &amp; Leaderboard</span>
         <button class="modal-close">&times;</button>
       </div>
       <div class="modal-body">
-        <p style="font-size:13px; color:#475569; margin-bottom:14px;">Rankings of today's mock examination participants. Highest score and accuracy takes the lead!</p>
+        <p style="font-size:13px; color:#475569; margin-bottom:14px;">Everyone registered in the app is listed here. Students with completed exams are ranked by score and accuracy.</p>
 
         <!-- Import Friend Score Code -->
         <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:12px; margin-bottom:16px;">
@@ -725,14 +510,14 @@
           </div>
         </div>
 
-        <table class="admin-table">
+        <table class="leaderboard-table">
           <thead>
             <tr>
               <th>Rank</th>
               <th>Candidate</th>
               <th>Score</th>
               <th>Accuracy</th>
-              <th>Submitted At</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody id="leaderboard-table-body">
@@ -782,11 +567,9 @@
   <script src="./js/gate-calculator.js"></script>
   <script src="./js/schedule-manager.js?v=20260918-2"></script>
   <script src="./js/json-validator.js?v=20260918-2"></script>
-  <script src="./js/github-sync.js"></script>
   <script src="./js/leaderboard-sync.js"></script>
   <script src="./js/exam-storage.js"></script>
   <script src="./js/exam-engine.js?v=20260918-2"></script>
-  <script src="./js/app.js?v=20260918-2"></script>
-  <script src="./js/admin.js?v=20260918-2"></script>
+  <script src="./js/app.js?v=20260918-3"></script>
 </body>
 </html>

@@ -1,0 +1,53 @@
+Please process the exam PDF `<SET_PDF_NAME.pdf>` (e.g., CSIR-NET-General-Aptitude-Questions-Answers-With-Solutions-Set-6.pdf) located in the workspace and generate the complete exam question paper JSON according to our project schema and synchronization rules.
+
+Exam Target Parameters:
+- Exam Date: <YYYY-MM-DD> (e.g., 2026-09-19)
+- Exam Start Time: <HH:MM> in 24-hour format (e.g., 22:35)
+- Set ID: <set_id> (e.g., set6)
+- Paper ID: csir_net_general_aptitude_<set_id>
+- Paper Title: "CSIR NET General Aptitude - <Set Name>"
+- Subject: "General Aptitude (Part A)"
+
+Follow these mandatory rules:
+
+### 1. Schedule & Timing Rules (Strict Formula)
+- Time format: Strictly 24-hour `HH:MM` format.
+- Duration formula: Exactly `2 minutes × totalQuestions` (e.g., 20 questions = 40 minutes).
+- `endTime` = `startTime + durationMinutes` (e.g., 22:35 + 40m = 23:15).
+- `resultDate` and `resultTime` = Declared at `endTime` (e.g., 23:15) or as specified.
+- The exact same schedule must be mirrored across:
+  1. `data/papers/csir_net_general_aptitude_<set_id>.json` (inside `"schedule"` block)
+  2. `data/today_paper.json`
+  3. `data/settings.json` (`startTime`, `endTime`, `resultTime`, `dailyStart`, `dailyEnd`, `examDate`, `resultDate`, `activePaperFile`)
+
+### 2. Diagram & Image Handling (NO SVG REGENERATION)
+- DO NOT regenerate or redraw diagrams, charts, or plots as SVG vector artwork.
+- Render the PDF pages at 2x resolution and crop figures directly from the PDF pages.
+- Ensure crops are crisp, tightly framed, free of watermarks, and have no clipped labels or axes.
+- Save cropped images in: `data/images/<set_id>/` (e.g., `data/images/set6/q2_diagram.png`).
+- Embed images inside each question's `diagramSvg` field using a responsive HTML container:
+  `<div style="text-align:center;margin:12px 0;"><img src="data/images/<set_id>/<image_name>.png" style="max-width:440px;width:100%;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,0.1);" alt="Diagram Description" /></div>`
+  *(Use a flex column wrapper if presenting both problem setup and separate option diagrams).*
+
+### 3. Schema & Content Compliance (`data/question_schema.json`)
+- Each question must specify:
+  - `id`: Integer sequence (1 to N).
+  - `type`: `"MCQ"`, `"MSQ"`, or `"NAT"`.
+  - `marks`: 2, `negativeMarks`: 0.66.
+  - `question`: Clean markdown with inline math (`$...$`) and display math (`$$...$$`).
+  - `options`: Array of 4 objects: `[ { "id": "a", "text": "..." }, ... ]`.
+  - `correctAnswer`: Matching the official PDF answer key (`"a"`, `"b"`, `"c"`, or `"d"`).
+  - `solution`: Step-by-step mathematical proof/derivation in LaTeX. Clean up OCR duplications and formatting errors.
+
+### 4. Synchronization & Dual Deployment
+- Save the master paper JSON to: `data/papers/csir_net_general_aptitude_<set_id>.json`
+- Copy the newly created file to: `data/today_paper.json` (for GitHub Pages static hosting).
+- Update `data/settings.json` with the matching schedule and `"activePaperFile": "csir_net_general_aptitude_<set_id>.json"` (for local Node.js server mode).
+
+### 5. Automated Validation & Git Push
+- Run an automated Node check to verify:
+  1. JSON parses without syntax errors.
+  2. Exactly all questions are present with valid keys.
+  3. Every image referenced in `diagramSvg` exists on disk with non-zero size.
+  4. Schedule dates and times are valid.
+- Once verified, stage the changed files, commit with a descriptive message, and push to `origin main`.

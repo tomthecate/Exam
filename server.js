@@ -8,17 +8,16 @@ const path = require('path');
 const os = require('os');
 
 const PORT = process.env.PORT || 3000;
-const ADMIN_PASSCODE = process.env.ADMIN_PASSCODE || 'admin123';
-
 const BASE_DIR = __dirname;
 const PAPERS_DIR = path.join(BASE_DIR, 'data', 'papers');
 const SUBMISSIONS_DIR = path.join(BASE_DIR, 'data', 'submissions');
 const SETTINGS_FILE = path.join(BASE_DIR, 'data', 'settings.json');
-const CANDIDATE_FILE = path.join(BASE_DIR, 'data', 'candidate.json');
+const PARTICIPANTS_FILE = path.join(BASE_DIR, 'data', 'participants.json');
 
 // Ensure directories exist
 if (!fs.existsSync(PAPERS_DIR)) fs.mkdirSync(PAPERS_DIR, { recursive: true });
 if (!fs.existsSync(SUBMISSIONS_DIR)) fs.mkdirSync(SUBMISSIONS_DIR, { recursive: true });
+if (!fs.existsSync(PARTICIPANTS_FILE)) fs.writeFileSync(PARTICIPANTS_FILE, '[]', 'utf8');
 
 // Ensure default settings exist
 if (!fs.existsSync(SETTINGS_FILE)) {
@@ -58,10 +57,6 @@ function getSettings() {
   }
 }
 
-function saveSettings(newSettings) {
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(newSettings, null, 2), 'utf8');
-}
-
 function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
@@ -87,14 +82,9 @@ function sendJson(res, statusCode, data) {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Passcode'
+    'Access-Control-Allow-Headers': 'Content-Type'
   });
   res.end(JSON.stringify(data));
-}
-
-function checkAdminAuth(req) {
-  const passcode = req.headers['x-admin-passcode'];
-  return passcode === ADMIN_PASSCODE;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -106,7 +96,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Passcode'
+      'Access-Control-Allow-Headers': 'Content-Type'
     });
     return res.end();
   }
@@ -155,145 +145,7 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // 3. Admin: Verify Passcode
-  if (req.method === 'POST' && pathname === '/api/admin/login') {
-    try {
-      const body = await parseJsonBody(req);
-      if (body.passcode === ADMIN_PASSCODE) {
-        return sendJson(res, 200, { success: true, message: 'Authenticated successfully.' });
-      } else {
-        return sendJson(res, 401, { error: 'Invalid admin passcode.' });
-      }
-    } catch (err) {
-      return sendJson(res, 400, { error: 'Invalid request.' });
-    }
-  }
-
-  // 4. Admin: List All Uploaded Papers
-  if (req.method === 'GET' && pathname === '/api/admin/papers') {
-    if (!checkAdminAuth(req)) return sendJson(res, 401, { error: 'Unauthorized. Admin passcode required.' });
-
-    const settings = getSettings();
-    const files = fs.readdirSync(PAPERS_DIR).filter(f => f.endsWith('.json'));
-    const papersList = files.map(file => {
-      const filePath = path.join(PAPERS_DIR, file);
-      try {
-        const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-        const stats = fs.statSync(filePath);
-        const qCount = data.questions ? data.questions.length : (data.totalQuestions || 0);
-        return {
-          filename: file,
-          paperId: data.paperId || file.replace('.json', ''),
-          title: data.title || file,
-          totalQuestions: qCount,
-          totalMarks: data.totalMarks || (qCount * 2),
-          durationMinutes: qCount * 2,
-          schedule: data.schedule || null,
-          uploadedAt: stats.mtime,
-          isActive: file === settings.activePaperFile
-        };
-      } catch (e) {
-        return { filename: file, error: 'Corrupted file', isActive: false };
-      }
-    });
-
-    return sendJson(res, 200, { papers: papersList, settings });
-  }
-
-  // 5. Admin: Upload Question Paper
-  if (req.method === 'POST' && pathname === '/api/admin/upload') {
-    if (!checkAdminAuth(req)) return sendJson(res, 401, { error: 'Unauthorized. Admin passcode required.' });
-
-    try {
-      const body = await parseJsonBody(req);
-      const paperData = body.paper;
-      const targetDate = body.targetDate || new Date().toISOString().split('T')[0]; // e.g. "2026-09-15"
-      const makeActive = body.makeActive !== false;
-
-      if (!paperData || !paperData.questions || !Array.isArray(paperData.questions)) {
-        return sendJson(res, 400, { error: 'Invalid paper data format. Missing questions array.' });
-      }
-      const schedule = paperData.schedule || {};
-      if (!schedule.examDate || !schedule.startTime || !schedule.resultDate || !schedule.resultTime) {
-        return sendJson(res, 400, { error: 'Paper JSON schedule must include examDate, startTime, resultDate, and resultTime.' });
-      }
-      delete paperData.durationMinutes;
-      delete schedule.endTime;
-      delete schedule.dailyStart;
-      delete schedule.dailyEnd;
-
-      // Generate filename based on date or title
-      const sanitizedTitle = (paperData.title || 'paper').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
-      const filename = `${targetDate}_${sanitizedTitle.slice(0, 30)}.json`;
-      const filePath = path.join(PAPERS_DIR, filename);
-
-      fs.writeFileSync(filePath, JSON.stringify(paperData, null, 2), 'utf8');
-
-      if (makeActive) {
-        const settings = getSettings();
-        settings.activePaperFile = filename;
-        saveSettings(settings);
-      }
-
-      return sendJson(res, 200, {
-        success: true,
-        message: `Paper "${paperData.title}" uploaded and saved as ${filename}.`,
-        filename,
-        isActive: makeActive
-      });
-    } catch (err) {
-      return sendJson(res, 500, { error: 'Failed to upload paper: ' + err.message });
-    }
-  }
-
-  // 6. Admin: Set Active Paper
-  if (req.method === 'POST' && pathname === '/api/admin/set-active') {
-    if (!checkAdminAuth(req)) return sendJson(res, 401, { error: 'Unauthorized. Admin passcode required.' });
-
-    try {
-      const body = await parseJsonBody(req);
-      const filename = body.filename;
-      if (!filename || !fs.existsSync(path.join(PAPERS_DIR, filename))) {
-        return sendJson(res, 404, { error: 'File not found in question papers library.' });
-      }
-
-      const settings = getSettings();
-      settings.activePaperFile = filename;
-      saveSettings(settings);
-
-      return sendJson(res, 200, { success: true, message: `Active paper updated to ${filename}.` });
-    } catch (err) {
-      return sendJson(res, 400, { error: 'Invalid request.' });
-    }
-  }
-
-  // 7. Admin: Update Schedule Settings
-  if (req.method === 'POST' && pathname === '/api/admin/settings') {
-    if (!checkAdminAuth(req)) return sendJson(res, 401, { error: 'Unauthorized. Admin passcode required.' });
-
-    try {
-      const body = await parseJsonBody(req);
-      if (!body.examDate || !body.startTime || !body.resultDate || !body.resultTime) {
-        return sendJson(res, 400, { error: 'All four JSON schedule fields are required.' });
-      }
-      const settings = getSettings();
-      const activeFile = path.join(PAPERS_DIR, settings.activePaperFile || 'csir_net_gate_general_aptitude_01.json');
-      if (!fs.existsSync(activeFile)) return sendJson(res, 404, { error: 'Active paper not found.' });
-      const paper = JSON.parse(fs.readFileSync(activeFile, 'utf8'));
-      paper.schedule = {
-        examDate: body.examDate,
-        startTime: body.startTime,
-        resultDate: body.resultDate,
-        resultTime: body.resultTime
-      };
-      fs.writeFileSync(activeFile, JSON.stringify(paper, null, 2), 'utf8');
-      return sendJson(res, 200, { success: true, schedule: paper.schedule });
-    } catch (err) {
-      return sendJson(res, 400, { error: 'Invalid settings update.' });
-    }
-  }
-
-  // 8. Submit Candidate Exam Attempt
+  // 3. Submit Candidate Exam Attempt
   if (req.method === 'POST' && pathname === '/api/exam/submit') {
     try {
       const submission = await parseJsonBody(req);
@@ -318,7 +170,31 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // 9. Get Submissions & Leaderboard
+  // 4. Register every candidate who uses the app, even before they finish an exam.
+  if (req.method === 'POST' && pathname === '/api/exam/participant') {
+    try {
+      const body = await parseJsonBody(req);
+      if (!body.candidateName) return sendJson(res, 400, { error: 'Candidate name is required.' });
+
+      const participants = JSON.parse(fs.readFileSync(PARTICIPANTS_FILE, 'utf8'));
+      const rollNo = body.rollNo || '-';
+      const key = `${body.candidateName.toLowerCase()}_${rollNo.toLowerCase()}`;
+      const index = participants.findIndex(item => `${String(item.candidateName || '').toLowerCase()}_${String(item.rollNo || '').toLowerCase()}` === key);
+      const participant = {
+        candidateName: body.candidateName,
+        rollNo,
+        registeredAt: body.registeredAt || new Date().toISOString()
+      };
+      if (index >= 0) participants[index] = { ...participants[index], ...participant };
+      else participants.push(participant);
+      fs.writeFileSync(PARTICIPANTS_FILE, JSON.stringify(participants, null, 2), 'utf8');
+      return sendJson(res, 200, { success: true, participant });
+    } catch (error) {
+      return sendJson(res, 500, { error: 'Failed to register participant: ' + error.message });
+    }
+  }
+
+  // 5. Get all registered participants and completed attempts for the leaderboard.
   if (req.method === 'GET' && pathname === '/api/exam/leaderboard') {
     const files = fs.readdirSync(SUBMISSIONS_DIR).filter(f => f.endsWith('.json'));
     const submissions = files.map(file => {
@@ -343,34 +219,36 @@ const server = http.createServer(async (req, res) => {
     // Sort by score descending, then accuracy descending
     submissions.sort((a, b) => b.score - a.score || b.accuracyPercent - a.accuracyPercent);
 
-    return sendJson(res, 200, {
-      totalCandidates: submissions.length,
-      leaderboard: submissions
-    });
-  }
-
-  // 10. Candidate Profile Persistence
-  if (req.method === 'GET' && pathname === '/api/candidate') {
-    if (fs.existsSync(CANDIDATE_FILE)) {
-      try {
-        const data = JSON.parse(fs.readFileSync(CANDIDATE_FILE, 'utf8'));
-        return sendJson(res, 200, data);
-      } catch (e) {}
-    }
-    return sendJson(res, 404, { error: 'No candidate profile saved' });
-  }
-
-  if (req.method === 'POST' && pathname === '/api/candidate') {
+    let participants = [];
     try {
-      const body = await parseJsonBody(req);
-      if (body && body.name) {
-        fs.writeFileSync(CANDIDATE_FILE, JSON.stringify(body, null, 2), 'utf8');
-        return sendJson(res, 200, { success: true, candidate: body });
+      participants = JSON.parse(fs.readFileSync(PARTICIPANTS_FILE, 'utf8'));
+    } catch (error) {}
+
+    const participantMap = new Map();
+    participants.forEach(participant => {
+      const key = `${String(participant.candidateName || '').toLowerCase()}_${String(participant.rollNo || '').toLowerCase()}`;
+      participantMap.set(key, participant);
+    });
+    submissions.forEach(submission => {
+      const key = `${submission.candidateName.toLowerCase()}_${String(submission.rollNo || '').toLowerCase()}`;
+      const existing = participantMap.get(key);
+      if (!existing || !Number.isFinite(Number(existing.score)) || Number(submission.score) > Number(existing.score)) {
+        participantMap.set(key, submission);
       }
-      return sendJson(res, 400, { error: 'Invalid candidate profile format.' });
-    } catch (e) {
-      return sendJson(res, 500, { error: 'Failed to save candidate: ' + e.message });
-    }
+    });
+
+    const leaderboard = Array.from(participantMap.values()).sort((a, b) => {
+      const aHasScore = Number.isFinite(Number(a.score));
+      const bHasScore = Number.isFinite(Number(b.score));
+      if (aHasScore !== bHasScore) return aHasScore ? -1 : 1;
+      if (!aHasScore) return String(a.candidateName).localeCompare(String(b.candidateName));
+      return Number(b.score) - Number(a.score) || Number(b.accuracyPercent || 0) - Number(a.accuracyPercent || 0);
+    });
+
+    return sendJson(res, 200, {
+      totalCandidates: leaderboard.length,
+      leaderboard
+    });
   }
 
   // --- STATIC FILE SERVING ---
@@ -414,6 +292,5 @@ server.listen(PORT, () => {
   console.log('====================================================');
   console.log(`  Local URL:        http://localhost:${PORT}`);
   console.log(`  Friend Wi-Fi URL: http://${localIp}:${PORT}`);
-  console.log(`  Admin Passcode:   ${ADMIN_PASSCODE}`);
   console.log('====================================================');
 });

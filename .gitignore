@@ -1,0 +1,5 @@
+.DS_Store
+data/.DS_Store
+data/candidate.json
+data/participants.json
+data/submissions/

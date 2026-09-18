@@ -4,6 +4,8 @@
 class GateMockApp {
   constructor() {
     this.currentPaper = null;
+    this.scheduledPaper = null;
+    this.practicePapers = [];
     this.examEngine = null;
     this.scheduleManager = new ScheduleManager();
     this.calculator = new GateCalculator('gate-calculator-container');
@@ -29,6 +31,8 @@ class GateMockApp {
     this.checkImportedFriendScore();
     // 4. Load paper
     await this.loadDefaultPaper();
+    this.scheduledPaper = this.currentPaper;
+    await this.loadPracticePapers();
     // 5. Evaluate route
     this.evaluateCurrentRoute();
   }
@@ -93,6 +97,7 @@ class GateMockApp {
       this.candidate = saved;
       window._gate_candidate = saved;
       this.updateCandidateHeader();
+      this.registerParticipant();
       const modal = document.getElementById('candidate-login-modal');
       if (modal) modal.style.display = 'none';
       return;
@@ -104,20 +109,6 @@ class GateMockApp {
       rollNo: `GATE-${Math.floor(1000 + Math.random() * 9000)}`
     };
     this.updateCandidateHeader();
-
-    // Check server if running with backend
-    try {
-      fetch('/api/candidate')
-        .then(r => r.ok ? r.json() : null)
-        .then(serverCand => {
-          if (serverCand && serverCand.name && serverCand.name.trim() && serverCand.name !== 'Candidate') {
-            this.setCandidate(serverCand.name, serverCand.rollNo);
-            const modal = document.getElementById('candidate-login-modal');
-            if (modal) modal.style.display = 'none';
-          }
-        })
-        .catch(() => {});
-    } catch (e) {}
 
     // Prompt candidate details on first visit if not saved
     setTimeout(() => {
@@ -194,16 +185,35 @@ class GateMockApp {
       document.cookie = `gate_candidate=${encodeURIComponent(JSON.stringify(this.candidate))}; expires=${expires}; path=/; SameSite=Lax`;
     } catch (e) {}
 
-    // 4. Server API sync
-    try {
-      fetch('/api/candidate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(this.candidate)
-      }).catch(() => {});
-    } catch (e) {}
+    this.registerParticipant();
 
     this.updateCandidateHeader();
+  }
+
+  registerParticipant() {
+    if (!this.candidate || !this.candidate.name || this.candidate.name === 'Candidate') return;
+    const participant = {
+      candidateName: this.candidate.name,
+      rollNo: this.candidate.rollNo || '-',
+      registeredAt: new Date().toISOString()
+    };
+
+    try {
+      const participants = JSON.parse(localStorage.getItem('gate_registered_participants') || '[]');
+      const key = `${participant.candidateName.toLowerCase()}_${participant.rollNo.toLowerCase()}`;
+      const existingIndex = participants.findIndex(item => `${String(item.candidateName || '').toLowerCase()}_${String(item.rollNo || '').toLowerCase()}` === key);
+      if (existingIndex >= 0) participants[existingIndex] = { ...participants[existingIndex], ...participant };
+      else participants.push(participant);
+      localStorage.setItem('gate_registered_participants', JSON.stringify(participants));
+    } catch (error) {}
+
+    try {
+      fetch('/api/exam/participant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(participant)
+      }).catch(() => {});
+    } catch (error) {}
   }
 
   saveCandidateFromModal() {
@@ -264,6 +274,61 @@ class GateMockApp {
     this.currentPaper = JsonValidator.getTemplate();
     this.applyPaperSchedule(this.currentPaper);
     this.updateCandidateHeader();
+  }
+
+  async loadPracticePapers() {
+    const papers = [];
+    if (this.scheduledPaper) papers.push(this.scheduledPaper);
+
+    try {
+      const response = await fetch('./data/papers/index.json');
+      if (response.ok) {
+        const manifest = await response.json();
+        const entries = Array.isArray(manifest) ? manifest : (manifest.papers || []);
+        const loaded = await Promise.all(entries.map(async entry => {
+          const file = typeof entry === 'string' ? entry : entry.file;
+          if (!file) return null;
+          try {
+            const paperResponse = await fetch(`./data/papers/${file}`);
+            return paperResponse.ok ? paperResponse.json() : null;
+          } catch (error) {
+            return null;
+          }
+        }));
+        papers.push(...loaded.filter(Boolean));
+      }
+    } catch (error) {
+      // The active paper remains available if the static manifest cannot be read.
+    }
+
+    const unique = new Map();
+    papers.forEach(paper => {
+      if (paper && Array.isArray(paper.questions)) {
+        unique.set(paper.paperId || paper.title, paper);
+      }
+    });
+    this.practicePapers = Array.from(unique.values());
+    this.renderPracticePaperOptions();
+  }
+
+  renderPracticePaperOptions() {
+    const select = document.getElementById('select-practice-paper');
+    if (!select) return;
+    select.innerHTML = this.practicePapers.map(paper => {
+      const count = paper.questions.length;
+      const selected = this.currentPaper && (paper.paperId || paper.title) === (this.currentPaper.paperId || this.currentPaper.title);
+      return `<option value="${this.escapeHtml(paper.paperId || paper.title)}" ${selected ? 'selected' : ''}>${this.escapeHtml(paper.title)} (${count} questions)</option>`;
+    }).join('');
+  }
+
+  selectPracticePaper(paperId) {
+    const paper = this.practicePapers.find(item => (item.paperId || item.title) === paperId);
+    if (!paper) return;
+    this.currentPaper = paper;
+    this.applyPaperSchedule(paper);
+    document.getElementById('paper-header-title').textContent = paper.title;
+    this.updateCandidateHeader();
+    this.renderLobby();
   }
 
   applyPaperSchedule(paper) {
@@ -415,6 +480,18 @@ class GateMockApp {
 
   renderLobby() {
     const state = this.scheduleManager.getCurrentState();
+    const isPractice = this.scheduleManager.mode === 'PRACTICE';
+    const practicePicker = document.getElementById('practice-paper-picker');
+    if (practicePicker) practicePicker.hidden = !isPractice;
+    if (isPractice) this.renderPracticePaperOptions();
+    const countdownBox = document.getElementById('lobby-schedule-countdown');
+    if (countdownBox) countdownBox.style.display = isPractice ? 'none' : 'inline-flex';
+    if (isPractice) {
+      const scheduleGuideline = document.getElementById('guideline-exam-schedule');
+      const resultGuideline = document.getElementById('guideline-result-schedule');
+      if (scheduleGuideline) scheduleGuideline.textContent = `Selected practice set: ${this.currentPaper.title}.`;
+      if (resultGuideline) resultGuideline.textContent = 'Practice results and detailed solutions appear immediately after submission.';
+    }
     const titleEl = document.getElementById('lobby-paper-title');
     if (titleEl && this.currentPaper) {
       titleEl.textContent = this.currentPaper.title;
@@ -434,7 +511,7 @@ class GateMockApp {
 
     const startBtn = document.getElementById('btn-start-lobby-exam');
     if (startBtn) {
-      if (this.scheduleManager.mode === 'PRACTICE') {
+      if (isPractice) {
         startBtn.textContent = `Start ${this.currentPaper.questions.length * 2}-Minute Practice Test Now`;
         startBtn.disabled = false;
         startBtn.style.opacity = '1';
@@ -684,7 +761,7 @@ class GateMockApp {
       // Backend not running (e.g. GitHub Pages or file://)
     }
 
-    // 2. Save to local storage submissions (for Admin Portal & local persistence)
+    // 2. Save to local storage submissions for local persistence.
     try {
       const localSubs = JSON.parse(localStorage.getItem('gate_local_submissions') || '[]');
       const existingIdx = localSubs.findIndex(item => 
@@ -735,34 +812,52 @@ class GateMockApp {
     const localSubs = JSON.parse(localStorage.getItem('gate_local_submissions') || '[]');
 
     const mergedMap = new Map();
-    [...(list || []), ...localList, ...localSubs].forEach(item => {
+    let registeredParticipants = [];
+    try {
+      registeredParticipants = JSON.parse(localStorage.getItem('gate_registered_participants') || '[]');
+    } catch (error) {}
+
+    [...(list || []), ...localList, ...localSubs, ...registeredParticipants].forEach(item => {
       if (!item || !item.candidateName) return;
-      const key = `${item.candidateName.toLowerCase()}_${item.paperId || 'default'}`;
-      if (!mergedMap.has(key) || mergedMap.get(key).score < item.score) {
+      const key = `${item.candidateName.toLowerCase()}_${(item.rollNo || '').toLowerCase()}`;
+      const previous = mergedMap.get(key);
+      const itemHasScore = Number.isFinite(Number(item.score));
+      const previousHasScore = previous && Number.isFinite(Number(previous.score));
+      if (!previous || (itemHasScore && !previousHasScore) || (itemHasScore && Number(item.score) > Number(previous.score))) {
         mergedMap.set(key, item);
       }
     });
 
     const mergedList = Array.from(mergedMap.values());
-    mergedList.sort((a, b) => b.score - a.score || b.accuracyPercent - a.accuracyPercent);
+    mergedList.sort((a, b) => {
+      const aHasScore = Number.isFinite(Number(a.score));
+      const bHasScore = Number.isFinite(Number(b.score));
+      if (aHasScore !== bHasScore) return aHasScore ? -1 : 1;
+      if (!aHasScore) return a.candidateName.localeCompare(b.candidateName);
+      return Number(b.score) - Number(a.score) || Number(b.accuracyPercent || 0) - Number(a.accuracyPercent || 0);
+    });
 
     if (mergedList.length === 0) {
       tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:16px;color:#64748b;">No submissions recorded yet today. Take the exam to see your score on the leaderboard!</td></tr>';
       return;
     }
 
-    tableBody.innerHTML = mergedList.map((s, idx) => {
+    let rank = 0;
+    tableBody.innerHTML = mergedList.map(s => {
       const isMe = this.candidate && s.candidateName.toLowerCase() === this.candidate.name.toLowerCase();
+      const hasScore = Number.isFinite(Number(s.score));
+      if (hasScore) rank += 1;
+      const rankLabel = hasScore ? (rank === 1 ? '🥇 #1' : (rank === 2 ? '🥈 #2' : (rank === 3 ? '🥉 #3' : `#${rank}`))) : '—';
       return `
-        <tr class="${idx === 0 ? 'leaderboard-rank-1' : (idx === 1 ? 'leaderboard-rank-2' : (idx === 2 ? 'leaderboard-rank-3' : ''))}">
-          <td><strong>${idx === 0 ? '🥇 #1' : (idx === 1 ? '🥈 #2' : (idx === 2 ? '🥉 #3' : `#${idx + 1}`))}</strong></td>
+        <tr class="${rank === 1 && hasScore ? 'leaderboard-rank-1' : (rank === 2 && hasScore ? 'leaderboard-rank-2' : (rank === 3 && hasScore ? 'leaderboard-rank-3' : ''))}">
+          <td><strong>${rankLabel}</strong></td>
           <td>
-            <div style="font-weight:700;">${s.candidateName} ${isMe ? '<span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:2px 6px;border-radius:4px;margin-left:4px;">YOU</span>' : ''}</div>
-            <div style="font-size:11px;color:#64748b;">Roll: ${s.rollNo}</div>
+            <div style="font-weight:700;">${this.escapeHtml(s.candidateName)} ${isMe ? '<span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:2px 6px;border-radius:4px;margin-left:4px;">YOU</span>' : ''}</div>
+            <div style="font-size:11px;color:#64748b;">Roll: ${this.escapeHtml(s.rollNo || '-')}</div>
           </td>
-          <td style="font-weight:800;color:#15803d;font-size:15px;">${s.score} / ${s.maxScore || 40}</td>
-          <td><strong>${s.accuracyPercent}%</strong></td>
-          <td style="font-size:12px;color:#64748b;">${new Date(s.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+          <td style="font-weight:800;color:${hasScore ? '#15803d' : '#64748b'};font-size:15px;">${hasScore ? `${s.score} / ${s.maxScore || 40}` : '—'}</td>
+          <td><strong>${hasScore ? `${s.accuracyPercent || 0}%` : '—'}</strong></td>
+          <td style="font-size:12px;color:#64748b;">${hasScore ? 'Completed' : 'Registered'}</td>
         </tr>
       `;
     }).join('');
@@ -1296,6 +1391,11 @@ class GateMockApp {
     const btnModeSched = document.getElementById('btn-mode-scheduled');
     if (btnModeSched) {
       btnModeSched.addEventListener('click', () => {
+        if (this.scheduledPaper) {
+          this.currentPaper = this.scheduledPaper;
+          this.applyPaperSchedule(this.currentPaper);
+          document.getElementById('paper-header-title').textContent = this.currentPaper.title;
+        }
         this.scheduleManager.setMode('SCHEDULED');
         this.updateModeBanner();
         this.evaluateCurrentRoute();
@@ -1309,6 +1409,11 @@ class GateMockApp {
         this.updateModeBanner();
         this.evaluateCurrentRoute();
       });
+    }
+
+    const practicePaperSelect = document.getElementById('select-practice-paper');
+    if (practicePaperSelect) {
+      practicePaperSelect.addEventListener('change', event => this.selectPracticePaper(event.target.value));
     }
 
     // Time simulator dropdown

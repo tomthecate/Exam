@@ -66,12 +66,10 @@ You do not need a server to change question papers. You have two easy ways:
 5. Click **Commit changes**.
 6. GitHub Pages will automatically refresh with today's new question paper!
 
-### Method 2: From the Website Admin Portal
-1. Open your live exam website.
-2. Click **⚙️ Admin Portal** (passcode: `admin123`).
-3. Under **"Upload Paper for Today"**, select your new `.json` file or paste the JSON text. The portal validates all LaTeX equations and shows a live preview.
-4. Click **"📥 Download today_paper.json"**, then drop the downloaded file into your GitHub repository `data/` folder.
-5. *(Optional)* If you enter your GitHub Personal Access Token once in **Admin Settings**, you can click **"☁️ Push Directly to GitHub Repository"** to update GitHub directly from the webpage with 1 click!
+### Add a paper to Practice Mode
+1. Add the new `.json` file inside `data/papers/`.
+2. Add its filename to `data/papers/index.json`.
+3. Commit both files. The set will then appear in the Practice Mode selector.
 
 ---
 
