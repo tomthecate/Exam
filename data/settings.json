@@ -1,3 +1,10 @@
 {
+  "examDate": "2026-09-18",
+  "startTime": "22:35",
+  "endTime": "23:15",
+  "resultDate": "2026-09-18",
+  "resultTime": "23:15",
+  "dailyStart": "22:35",
+  "dailyEnd": "23:15",
   "activePaperFile": "csir_net_general_aptitude_set_5.json"
 }
